@@ -118,7 +118,7 @@ static int _camif_init_format (CameraDevice *self, int width, int height)
 		return result;
 	}
 
-	printf("VIDIOC_G_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
+	printf("VIDIOC_G_FMT: get self->vid_fmt.fmt.pix info\n");
 	printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
 	printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
 
@@ -181,7 +181,7 @@ static int _camif_init_format (CameraDevice *self, int width, int height)
     if ((result = ioctl(self->fd, VIDIOC_S_FMT, &self->vid_fmt)) < 0) {
 		printf(" ERROR :: cam ioctl() in function VIDIOC_S_FMT failed!\n");
     } else {
-		printf("VIDIOC_S_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
+		printf("VIDIOC_S_FMT: get self->vid_fmt.fmt.pix info\n");
 		printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
 		printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
 	}

@@ -59,14 +59,10 @@ when        who       what, where, why
 #define CAMERA_DEVICE_NAME 		"/dev/video0"
 #define FB_DEVICE_NAME			"/dev/fb0"
 #define OVERLAY_DEVICE_NAME		"/dev/overlay"
-#define COMPOSITE_DEVICE 		"/dev/composite"
 #define VIQE_DEVICE_NAME		"/dev/viqe"
 
 #define PREVIEW_WIDTH	 800
 #define PREVIEW_HEIGHT	 600
-
-extern int cam_id;
-#define DEVICE_NR	5
 
 /*
  * Cortex-M3 Early-view Mode

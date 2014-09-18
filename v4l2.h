@@ -267,7 +267,6 @@ typedef struct {
 	int							fb_xres;
 	int							fb_yres;
 
-	int							camdev;
 	int							display;	// display on
 
 	/* for viqe histogram */
@@ -282,7 +281,6 @@ typedef struct {
 	struct tcc_lcdc_image_update_extend outdisp_info;
 
 	/* option */
-	int use;
 	int timestamp;	// display time-stamp
 	int record;		// recording
 	FILE *fp;

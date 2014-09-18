@@ -514,187 +514,6 @@ auto_start:
 	return NULL;
 }
 
-void* handle_stdin_multi(void* param)
-{
-	CameraDevice *dev = (CameraDevice *)param;
-	char cmdline[32];
-	int r;
-	int i, first = 0;
-	unsigned int prev_w, prev_h;
-	unsigned int sx, sy, w, h, fmt;
-
-	if (auto_start)
-		goto auto_start;
-
-	while (1)
-	{		
-		usleep(1000*100);
-
-		if (auto_start)
-			continue;
-	
-		// 1. Get Command!!
-		memset(cmdline, 0, 32);		
-		if((r = read(STDIN_FILENO, cmdline, 32)) == 0) 
-			printf(" Wrong input!! \n");
-
-		// 2. Process Function!!
-		if (!strncmp("start", cmdline, 5))
-		{
-auto_start:
-			for (i = 0; i < DEVICE_NR; i++) {
-				if (dev[i].use) {
-					rsc_init_lcd(&dev[i]);
-					if (!first++) {
-						prev_w = dev[i].preview_width;
-						prev_h = dev[i].preview_height;
-						sx = dev[i].overlay_config.sx;
-						sy = dev[i].overlay_config.sy;
-						w = dev[i].overlay_config.width;
-						h = dev[i].overlay_config.height;
-						fmt = dev[i].overlay_config.format;
-					} else {
-						dev[i].preview_width = prev_w;
-						dev[i].preview_height = prev_h;
-						dev[i].overlay_config.sx = sx;
-						dev[i].overlay_config.sy = sy;
-						dev[i].overlay_config.width = w;
-						dev[i].overlay_config.height = h;
-						dev[i].overlay_config.format = fmt;
-					}
-
-					camif_set_resolution(&dev[i], dev[i].preview_width, dev[i].preview_height);
-					camif_start_stream(&dev[i]);
-
-					if (first == 1) {
-						rsc_overlay_ctrl(&dev[i], 1);
-						dev[i].display = 1;		// default dispaly on
-					}
-				}
-			}
-		}
-		else if (!strncmp("0", cmdline, 1))
-		{
-			dev[0].display = 1;		// video0 dispaly on
-			dev[1].display = 0;
-			dev[2].display = 0;
-			dev[3].display = 0;
-			dev[4].display = 0;
-		}
-		else if (!strncmp("1", cmdline, 1))
-		{
-			dev[0].display = 0;
-			dev[1].display = 1;
-			dev[2].display = 0;
-			dev[3].display = 0;
-			dev[4].display = 0;
-		}
-		else if (!strncmp("2", cmdline, 1))
-		{
-			dev[0].display = 0;
-			dev[1].display = 0;
-			dev[2].display = 1;
-			dev[3].display = 0;
-			dev[4].display = 0;
-		}
-		else if (!strncmp("3", cmdline, 1))
-		{
-			dev[0].display = 0;
-			dev[1].display = 0;
-			dev[2].display = 0;
-			dev[3].display = 1;
-			dev[4].display = 0;
-		}
-		else if (!strncmp("4", cmdline, 1))
-		{
-			dev[0].display = 0;
-			dev[1].display = 0;
-			dev[2].display = 0;
-			dev[3].display = 0;
-			dev[4].display = 1;
-		}
-		else if (!strncmp("stop", cmdline, 4)) 
-		{
-			for (i = 0; i < DEVICE_NR; i++) {
-				if (dev[i].use) {
-					camif_stop_stream(&dev[i]);
-					rsc_overlay_ctrl(&dev[i], 0);
-				}
-			}
-		}
-		else if (!strncmp("quit", cmdline, 4)) 
-		{
-			exit(1);
-		}
-		/*----------------------------------------------------------------
-		 * I2C Control
-		 */
-		else if (!strncmp("w8", cmdline, 4)) 
-		{
-			/* 12 34 56
-			 * w8 44 55
-			 */
-			char *args;
-			unsigned char reg, val;
-
-			args = cmdline + 3;
-			reg = strtol(args, NULL, 16);	// offset of register
-			args = cmdline + 5;
-			val = strtol(args, NULL, 16);	// value
-
-			i2c_send_8(dev, reg, val);
-		}
-		else if (!strncmp("r8", cmdline, 4)) 
-		{
-			/* 12 34
-			 * r8 44 
-			 */
-			char *args;
-			unsigned char reg;
-
-			args = cmdline + 3;
-			reg = strtol(args, NULL, 16);
-
-			i2c_recv_8(dev, reg);
-		}
-		else if (!strncmp("w16", cmdline, 3)) 
-		{
-			/* 123 4567 89
-			 * w16 4444 55 
-			 */
-			char *args;
-			unsigned short reg;
-			unsigned char val;
-
-			args = cmdline + 4;
-			reg = strtol(args, NULL, 16);	// offset of register
-			args = cmdline + 8;
-			val = strtol(args, NULL, 16);	// value
-
-			i2c_send_16(dev, reg, val);
-		}
-		else if (!strncmp("r16", cmdline, 3)) 
-		{
-			/* 123 4567
-			 * r16 4444 
-			 */
-			char *args;
-			unsigned short reg;
-
-			args = cmdline + 4;
-			reg = strtol(args, NULL, 16);
-
-			i2c_recv_16(dev, reg);
-		}
-		else
-		{
-			printf("invalid input\n\n");
-		}
-	}
-
-	return NULL;
-}
-
 /*===========================================================================
 FUNCTION
 ===========================================================================*/
@@ -704,16 +523,12 @@ void help_msg(void)
            "|  Usage: camapp\n"
            "| ===============\n"
            "| <Display sensor image to LCD>\n" 
-           "|  -d [device number...]\n"
-           "|       0: /dev/video0\n"
-           "|       1: /dev/video1\n"
-           "|       2: /dev/video2\n"
-           "|       3: /dev/video3\n"
-           "|       4: /dev/video4\n"
+           "|  -d [video device number]\n"
            "|    ex) display sensor /dev/video0\n"
            "|       $ camapp -d 0\n"
-           "|    ex) display sensor /dev/video0, 1, 2, 3\n"
-           "|       $ camapp -d 0 1 2 3\n"
+           "|    ex) display sensor /dev/video1\n"
+           "|       $ camapp -d 1\n"
+
            "|\n"
            "| ------ for debugging options -----\n"
            "| <Time-Stamp & Recoding file>\n"
@@ -745,7 +560,7 @@ void help_msg(void)
 }
 
 static int use_vout = 0;
-int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *single_nr, int *option)
+int parse_args(int argc, char *argv[], CameraDevice *dev, int *option)
 {
 	int ret = 0;
 	int device = 0;
@@ -813,27 +628,20 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 	if (device) {
 		while (optind < argc) {
 			int i = atoi(argv[optind]);
-			if (i >= 0 && i < DEVICE_NR) {
-				*single += 1;
-				*single_nr = i;
-				dev[i].use = 1;
-				dev[i].output_width = width;
-				dev[i].output_height = height;
-				sprintf(dev[i].dev_name, "/dev/video%d", i);
-				printf("%s\n", dev[i].dev_name);
+			dev->output_width = width;
+			dev->output_height = height;
+			sprintf(dev->dev_name, "/dev/video%d", i);
+			printf("%s\n", dev->dev_name);
 
-				if (i2c_slave_addr) {
-					dev[i].i2c_slave_addr = i2c_slave_addr;
-					if (i2c_dev_port != NULL) {
-						memcpy(dev[i].i2c_dev_port, i2c_dev_port, sizeof(dev[i].i2c_dev_port));
-					} else {
-						printf("error: need i2c device name\n");
-						ret = -1;
-					}
-					printf("i2c: 0x%x, %s\n", dev[i].i2c_slave_addr, dev[i].i2c_dev_port);
+			if (i2c_slave_addr) {
+				dev->i2c_slave_addr = i2c_slave_addr;
+				if (i2c_dev_port != NULL) {
+					memcpy(dev->i2c_dev_port, i2c_dev_port, sizeof(dev->i2c_dev_port));
+				} else {
+					printf("error: need i2c device name\n");
+					ret = -1;
 				}
-			} else {
-				ret = -1;
+				printf("i2c: 0x%x, %s\n", dev->i2c_slave_addr, dev->i2c_dev_port);
 			}
 			optind++;
 		}
@@ -841,29 +649,27 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		ret = -1;
 	}
 
-exit:
 	return ret;
 }
 
 int main(int argc, char *argv[])
 {
-	int i, /*arg = 0,*/ first = 0;
-	int single = 0, single_nr = 0;
 	int option = 0;
-	CameraDevice dev[DEVICE_NR];
+	CameraDevice *dev;
 	unsigned int preview_fmt;
-	int fb_fd, overlay_fd, composite_fd, viqe_fd, i2c_fd;
+	int fb_fd, overlay_fd, viqe_fd, i2c_fd;
 
 	if (argc < 2) {
 		help_msg();
-		return -1;
+		return 0;
 	}
 
-	memset(dev, 0, sizeof(CameraDevice) * DEVICE_NR);
+	dev = (CameraDevice *)malloc(sizeof(CameraDevice));
+	memset(dev, 0, sizeof(CameraDevice));
 
-	if (parse_args(argc, argv, dev, &single, &single_nr, &option)) {
+	if (parse_args(argc, argv, dev, &option)) {
 		help_msg();
-		return -1;
+		goto exit;
 	}
 
 	/*
@@ -876,67 +682,42 @@ int main(int argc, char *argv[])
 		preview_fmt = select_preview_format();
 	}
 
-	if (use_vout && single > 1) {
-		printf("error: V4L2 VOUT driver only supports single VIN driver.\n");
-		return -1;
-	}
-
     /*
      * Open Device (CAMERA, LCD, Etc..)
      */
-	for (i = 0; i < DEVICE_NR; i++) {
-		if (dev[i].use) {
-			dev[i].camdev = i;
-			dev[i].use_vout = use_vout;
-			init_camera_data(&dev[i], preview_fmt, option);
-			if ((dev[i].fd = open(dev[i].dev_name, O_RDWR)) < 0) {
-				printf("error: driver open fail (%s)\n", dev[i].dev_name);
-				return -1;
-		    }
-
-			if (!first++) {
-				open_device(&dev[i]);
-				fb_fd = dev[i].fb_fd0;
-				overlay_fd = dev[i].overlay_fd;
-				composite_fd = dev[i].composite_fd;
-				viqe_fd = dev[i].viqe_fd;
-				i2c_fd = dev[i].i2c_fd;
-				camif_get_dev_info(&dev[i]);
-			} else {
-				dev[i].fb_fd0 = fb_fd;
-				dev[i].overlay_fd = overlay_fd;
-				dev[i].composite_fd = composite_fd;
-				dev[i].viqe_fd = viqe_fd;
-				dev[i].i2c_fd = i2c_fd;
-			}
-
-			/* Creat Thread (Get-Frame)
-		     */
-			pthread_create(&dev[i].frame_threads, NULL, handle_camera, (void *)&dev[i]);
-			dev[i].cam_mode = MODE_START;
-		}
+	dev->use_vout = use_vout;
+	init_camera_data(dev, preview_fmt, option);
+	if ((dev->fd = open(dev->dev_name, O_RDWR)) < 0) {
+		printf("error: driver open fail (%s)\n", dev->dev_name);
+		goto exit;
     }
+
+	open_device(dev);
+	fb_fd = dev->fb_fd0;
+	overlay_fd = dev->overlay_fd;
+	viqe_fd = dev->viqe_fd;
+	i2c_fd = dev->i2c_fd;
+	camif_get_dev_info(dev);
+
+	/* Creat Thread (Get-Frame)
+     */
+	pthread_create(&dev->frame_threads, NULL, handle_camera, (void *)dev);
+	dev->cam_mode = MODE_START;
 
 	printf("CAMERA Start Ready!!! \n");
 
 	/*
 	 * IPC-Main Loop
 	 */
-	if (single == 1) {
-		handle_stdin(&dev[single_nr]);
-	} else {
-		handle_stdin_multi(dev);
-	}
+	handle_stdin(dev);
 
 	/*
 	 * Close Device/Thread..
 	 */
-	for (i = 0; i < 4; i++) {
-		if (dev[i].use) {
-			pthread_join(dev[i].frame_threads, 0);
-		    close_device(&dev[i]);
-		}
-	}
+	pthread_join(dev->frame_threads, 0);
+    close_device(dev);
 
+exit:
+	free(dev);
     return 0;
 }
