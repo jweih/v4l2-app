@@ -19,6 +19,13 @@ when        who       what, where, why
 
 #include "pmap.h"
 
+#define fourcc2char(fourcc) \
+        ((char) ((fourcc)     &0xff)), \
+        ((char) (((fourcc)>>8 )&0xff)), \
+        ((char) (((fourcc)>>16)&0xff)), \
+        ((char) (((fourcc)>>24)&0xff))
+
+
 // fb
 #define TCC_LCDC_SET_ENABLE				0x0050
 #define TCC_LCDC_SET_DISABLE			0x0051
@@ -127,9 +134,21 @@ struct tcc_lcdc_image_update_extend
 	int frameInfo_interlace;
 //#endif
 
+	int one_field_only_interlace;
+
+	int MVCframeView;
+	unsigned int MVC_Base_addr0;
+	unsigned int MVC_Base_addr1;
+	unsigned int MVC_Base_addr2;
+
 	unsigned int dst_addr0;
 	unsigned int dst_addr1;
 	unsigned int dst_addr2;
+
+	int max_buffer;
+	int ex_output;
+
+	unsigned int codec_id;
 };
 
 typedef enum{
@@ -166,7 +185,6 @@ typedef struct
 	si_chromakey_info		chromakey_info;			
 }cif_SuperImpose;
 
-#if !defined(_PUSH_VSYNC_)
 typedef struct
 {
 	uint32_t sx;
@@ -176,7 +194,6 @@ typedef struct
 	uint32_t format;
 	uint32_t transform;
 } overlay_config_t;
-#endif
 
 /*======================== VIQE HISTOGRAM ==================================*/
 #define IOCTL_VIQE_HISTOGRAM_INIT		0xBF0
@@ -216,6 +233,56 @@ typedef struct
 } VIQE_HI_TYPE;
 /*===========================================================================*/
 
+/*
+ * Cortex-M3 Early-view Mode
+ */
+#define IOCTL_CM3_CTRL_OFF		    0
+#define IOCTL_CM3_CTRL_ON			1
+#define IOCTL_CM3_CTRL_RESET    	2
+#define IOCTL_CM3_CTRL_CMD			3
+
+typedef struct {
+    int iOpCode;
+    int* pHandle;
+    void* pParam1;
+    void* pParam2;
+} t_cm3_avn_cmd;
+
+typedef enum {
+	HW_TIMER_TEST 					= 0x70,
+	GET_EARLY_CAMERA_STATUS 		= 0x71,
+	SET_EARLY_CAMERA_STOP 			= 0x72,
+	SET_EARLY_CAMERA_DISPLAY_OFF 	= 0x73,
+	SET_REAR_CAMERA_RGEAR_DETECT	= 0x74,
+} CM3_AVN_CMD;
+
+/* vout */
+#define MPLANE_NUM	2
+#define MPLANE_VID	0
+#define MPLANE_SUB	1
+
+enum mplane_vid_component {
+	/* video information */
+	VID_SRC = 0,			// MPLANE_VID 0x0
+	VID_NUM = 1,			// num of mplanes
+	VID_BASE1 = 2,			// base1 address of video src (U/Cb)
+	VID_BASE2 = 3,			// base1 address of video src (V/Cr)
+	VID_WIDTH = 4,			// width/height of video src
+	VID_HEIGHT = 5,
+	VID_CROP_LEFT = 6,		// crop-[left/top/width/height] of video src
+	VID_CROP_TOP = 7,
+	VID_CROP_WIDTH = 8,
+	VID_CROP_HEIGHT = 9,
+};
+
+enum tcc_vout_status {
+	TCC_VOUT_IDLE,
+	TCC_VOUT_INITIALISING,	// vout driver opened
+	TCC_VOUT_RUNNING,		// vout streamon
+	TCC_VOUT_STOP,			// vout streamoff
+};
+
+
 typedef struct {
 	char dev_name[12];
 	pthread_t frame_threads;
@@ -240,10 +307,8 @@ typedef struct {
 
 	int			 				rt_mode;
 
-#if !defined(_PUSH_VSYNC_)
 	int							overlay_fd;
 	overlay_config_t			overlay_config;
-#endif
 
 	int							composite_fd;
 
@@ -283,6 +348,21 @@ typedef struct {
 
 	/* auto start */
 	int auto_start;
+
+	/* cm3 */
+	int cm3_fd;
+	t_cm3_avn_cmd cm3_cmd;
+
+	/* vout */
+	int use_vout;
+	int vout_fd;
+	int vout_status;
+	struct v4l2_format vout_fmt;
+	struct v4l2_format vout_external_sc_fmt;	// not used (need vioc path)
+	struct v4l2_requestbuffers	vout_rbuf;
+	struct v4l2_buffer vout_qbuf;
+	struct v4l2_plane vout_vid_mplane;
+	struct v4l2_buffer vout_dqbuf;
 } CameraDevice;
 
 

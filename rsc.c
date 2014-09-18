@@ -40,16 +40,9 @@ void rsc_init_lcd(CameraDevice* self)
     ioctl(self->fb_fd0, FBIOGET_FSCREENINFO, &fb_fix);
     ioctl(self->fb_fd0, FBIOGET_VSCREENINFO, &fb_info);
 
-#if defined(_PUSH_VSYNC_TT_TEST_00_)
-	self->preview_width  = PREVIEW_WIDTH;
-	self->preview_height = PREVIEW_HEIGHT;
-	self->fb_xres = fb_info.xres;
-	self->fb_yres = fb_info.yres;
-	DBug_printf("LCD mode: %d, Preview: %d x %d <tt>\n", self->rt_mode, self->preview_width, self->preview_height);
-#else
 	self->preview_width  = fb_info.xres;
 	self->preview_height = fb_info.yres;
-	DBug_printf("LCD mode: %d, Preview: %d x %d\n", self->rt_mode, self->preview_width, self->preview_height);
+	printf("LCD mode: %d, Preview: %d x %d\n", self->rt_mode, self->preview_width, self->preview_height);
 
 	ImgInfo.width 	= self->preview_width;
 	ImgInfo.height 	= self->preview_height;
@@ -64,46 +57,62 @@ void rsc_init_lcd(CameraDevice* self)
 		self->outdisp_info.offset_x		= fb_info.xoffset;
 		self->outdisp_info.offset_y		= fb_info.yoffset;
 
-		self->outdisp_info.Frame_width	= self->output_width/*self->preview_width*/;
-		self->outdisp_info.Frame_height	= self->output_height/*self->preview_height*/;
+		self->outdisp_info.Frame_width	= self->vid_fmt.fmt.pix.width;
+		self->outdisp_info.Frame_height	= self->vid_fmt.fmt.pix.height;
 
 		self->outdisp_info.crop_left	= 0;
 		self->outdisp_info.crop_top		= 0;
-		self->outdisp_info.crop_right	= self->outdisp_info.Frame_width;
-		self->outdisp_info.crop_bottom	= self->outdisp_info.Frame_height;
+		self->outdisp_info.crop_right	= self->output_width;
+		self->outdisp_info.crop_bottom	= self->output_height;
 
-		self->outdisp_info.Image_width	= self->output_width/*self->preview_width*/;
-		self->outdisp_info.Image_height	= self->output_height/*self->preview_height*/;
+		self->outdisp_info.Image_width	= self->vid_fmt.fmt.pix.width;
+		self->outdisp_info.Image_height	= self->vid_fmt.fmt.pix.height;
+		
+		self->outdisp_info.outputMode	= OUTPUT_COMPOSITE;
+		self->outdisp_info.on_the_fly	= 0;
 	}
-#endif
 
-#if !defined(_PUSH_VSYNC_)
-	self->overlay_config.sx = ImgInfo.pos_x;
-	self->overlay_config.sy = ImgInfo.pos_y;
-	self->overlay_config.width = ImgInfo.width;
-	self->overlay_config.height = ImgInfo.height;
-	//self->overlay_config.format = self->vid_fmt.fmt.pix.pixelformat;
-	self->overlay_config.format = vioc2fourcc(self->preview_fmt);
+	if (self->use_vout == 0) {
+		self->overlay_config.sx = ImgInfo.pos_x;
+		self->overlay_config.sy = ImgInfo.pos_y;
+		self->overlay_config.width = ImgInfo.width;
+		self->overlay_config.height = ImgInfo.height;
+		//self->overlay_config.format = self->vid_fmt.fmt.pix.pixelformat;
+		self->overlay_config.format = vioc2fourcc(self->preview_fmt);
 
-	ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE,&self->overlay_config);
-	DBug_printf("[%s] OVERLAY_SET_CONFIGURE: (%d x %d) fmt(0x%x)\n", __func__, 
-				self->overlay_config.width, self->overlay_config.height,
-				self->overlay_config.format);
-#endif
+		ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE,&self->overlay_config);
+		printf("[%s] OVERLAY_SET_CONFIGURE: (%d x %d) fmt(0x%x)\n", __func__,
+					self->overlay_config.width, self->overlay_config.height,
+					self->overlay_config.format);
+	}
 
-	if (self->outdisp_dev) {
-		switch (self->outdisp_dev) {
-		case OUTPUT_HDMI:
-			ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-			printf("Output display: HDMI\n");
-			break;
-		case OUTPUT_COMPOSITE:
-			ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
-			printf("Output display: Composite\n");
-			break;
-		case OUTPUT_COMPONENT:
-			printf("Not support component output\n");
-			break;
+	//if (self->outdisp_dev) {
+	//	switch (self->outdisp_dev) {
+	//	case OUTPUT_HDMI:
+	//		ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
+	//		printf("Output display: HDMI\n");
+	//		break;
+	//	case OUTPUT_COMPOSITE:
+	//		ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
+	//		printf("Output display: Composite\n");
+	//		break;
+	//	case OUTPUT_COMPONENT:
+	//		printf("Not support component output\n");
+	//		break;
+	//	}
+	//}
+}
+
+/*===========================================================================
+FUNCTION
+===========================================================================*/
+void rsc_overlay_ctrl(CameraDevice* self, unsigned char en)
+{
+	if (en) {
+	} else {
+		if (self->use_vout == 0) {
+			if(self->overlay_fd >= 0)
+				ioctl(self->overlay_fd, OVERLAY_SET_DISABLE,NULL);
 		}
 	}
 }
@@ -111,37 +120,20 @@ void rsc_init_lcd(CameraDevice* self)
 /*===========================================================================
 FUNCTION
 ===========================================================================*/
-void rsc_set_lcd_ch0(CameraDevice* self, unsigned char en)
-{
-#if !defined(_PUSH_VSYNC_)
-	if(en)
-	{
-		if(self->fb_fd0 >= 0)
-			ioctl(self->fb_fd0,TCC_LCDC_SET_DISABLE, NULL);
-	}
-	else
-	{
-		if(self->overlay_fd >= 0)
-			ioctl(self->overlay_fd, OVERLAY_SET_DISABLE,NULL);
-
-		if(self->fb_fd0 >= 0)
-			ioctl(self->fb_fd0,TCC_LCDC_SET_ENABLE, NULL);
-	}
-#endif
-}
-
-/*===========================================================================
-FUNCTION
-===========================================================================*/
-void rsc_set_lcd_addr(CameraDevice* self, unsigned int addr)
+void rsc_v4l2_qbuf(CameraDevice* self, unsigned int addr)
 {
 	unsigned int base[3] = {0, 0, 0};
 	unsigned int width, height;
 
 	//width = self->preview_width;
 	//height = self->preview_height;
-	width = self->overlay_config.width;
-	height = self->overlay_config.height;
+	if (self->use_vout == 0) {
+		width = self->overlay_config.width;
+		height = self->overlay_config.height;
+	} else {
+		width = self->vout_fmt.fmt.pix.width;
+		height = self->vout_fmt.fmt.pix.height;
+	}
 
 	switch (self->preview_fmt) {
 	case TCC_LCDC_IMG_FMT_YUV420SP:
@@ -182,48 +174,89 @@ void rsc_set_lcd_addr(CameraDevice* self, unsigned int addr)
 		self->outbuf = (void *)base[0];
 		self->mem_len = width * height * 2;
 		break;
+	case TCC_LCDC_IMG_FMT_RGB888_3:
+		base[0] = addr;
+		self->outbuf = (void *)base[0];
+		self->mem_len = width * height * 3;	// RGB888 bpp = 3
+		break;
 	}
 
-	if(debug_flg)
-		printf("[APP] addr = %x\n", addr);
+	if (self->use_vout == 0) {
+		ioctl(self->overlay_fd, OVERLAY_QUEUE_BUFFER,base);
 
-#if !defined(_PUSH_VSYNC_)
-	ioctl(self->overlay_fd, OVERLAY_QUEUE_BUFFER,base);
-#endif
+		if (self->outdisp_dev) {
+			self->outdisp_info.addr0 = base[0];
+			self->outdisp_info.addr1 = base[1];
+			self->outdisp_info.addr2 = base[2];
+			self->outdisp_info.Frame_width	= self->vid_fmt.fmt.pix.width;
+			self->outdisp_info.Frame_height	= self->vid_fmt.fmt.pix.height;
+			self->outdisp_info.Image_width	= self->vid_fmt.fmt.pix.width;
+			self->outdisp_info.Image_height	= self->vid_fmt.fmt.pix.height;
 
-	if (self->outdisp_dev) {
-		self->outdisp_info.addr0 = base[0];
-		self->outdisp_info.addr1 = base[1];
-		self->outdisp_info.addr2 = base[2];
+			switch (self->outdisp_dev) {
+			case OUTPUT_HDMI:
+				#if 1
+				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
+				#else
+				self->outdisp_info.Lcdc_layer = LCDC_LAYER_2;
+				self->outdisp_info.offset_x = 0;
+				self->outdisp_info.offset_y = 0;
+				self->outdisp_info.crop_right = 960;
+				//self->outdisp_info.enable = 0;
+				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
 
-		switch (self->outdisp_dev) {
-		case OUTPUT_HDMI:
-#if 1
-			ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-#else
-			self->outdisp_info.Lcdc_layer = LCDC_LAYER_2;
-			self->outdisp_info.offset_x = 0;
-			self->outdisp_info.offset_y = 0;
-			self->outdisp_info.crop_right = 960;
-			//self->outdisp_info.enable = 0;
-			ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
+				self->outdisp_info.Lcdc_layer = LCDC_LAYER_1;
+				self->outdisp_info.offset_x = 960;
+				self->outdisp_info.offset_y = 0;
+				self->outdisp_info.crop_right = 960;
+				//self->outdisp_info.enable = 1;
+				//self->outdisp_info.addr1 = base[2];
+				//self->outdisp_info.addr2 = base[1];
+				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
+				#endif
+				break;
+			case OUTPUT_COMPOSITE:
+				ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
+				break;
+			case OUTPUT_COMPONENT:
+				printf("Not support component output\n");
+				break;
+			}
+		}
+	} else {
+		int ret;
+	
+		//self->vout_qbuf.index;									// already seted by camif_get_frame()
+		self->vout_qbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		self->vout_qbuf.field = V4L2_FIELD_NONE;					// progressive
+		self->vout_qbuf.timecode.type = 0;							// 0: video, 0xff00: still image 
+		self->vout_qbuf.memory = V4L2_MEMORY_USERPTR;
+		self->vout_qbuf.m.planes->bytesused = 0x0;					// [16:0] Y-stride, [31:17] UV-stride
+		self->vout_qbuf.m.planes->m.userptr = base[0];				// base0 address
+		self->vout_qbuf.m.planes->reserved[VID_BASE1] = base[1];	// base1 address
+		self->vout_qbuf.m.planes->reserved[VID_BASE2] = base[2];	// base2 address
+		self->vout_qbuf.m.planes->reserved[VID_SRC] = MPLANE_VID;
+		self->vout_qbuf.m.planes->reserved[VID_NUM] = 1;
 
-			self->outdisp_info.Lcdc_layer = LCDC_LAYER_1;
-			self->outdisp_info.offset_x = 960;
-			self->outdisp_info.offset_y = 0;
-			self->outdisp_info.crop_right = 960;
-			//self->outdisp_info.enable = 1;
-			//self->outdisp_info.addr1 = base[2];
-			//self->outdisp_info.addr2 = base[1];
-			ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-#endif
-			break;
-		case OUTPUT_COMPOSITE:
-			ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
-			break;
-		case OUTPUT_COMPONENT:
-			printf("Not support component output\n");
-			break;
+		if (self->use_scaler) {
+			self->vout_qbuf.m.planes->reserved[VID_WIDTH] = self->vout_external_sc_fmt.fmt.win.w.width;
+			self->vout_qbuf.m.planes->reserved[VID_HEIGHT] = self->vout_external_sc_fmt.fmt.win.w.height;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_LEFT] = self->vout_external_sc_fmt.fmt.win.w.left;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_TOP] = self->vout_external_sc_fmt.fmt.win.w.top;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_WIDTH] = self->vout_external_sc_fmt.fmt.win.w.width;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_HEIGHT] = self->vout_external_sc_fmt.fmt.win.w.height;
+		} else {
+			self->vout_qbuf.m.planes->reserved[VID_WIDTH] = self->vout_fmt.fmt.pix.width;
+			self->vout_qbuf.m.planes->reserved[VID_HEIGHT] = self->vout_fmt.fmt.pix.height;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_LEFT] = 0;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_TOP] = 0;
+			self->vout_qbuf.m.planes->reserved[VID_CROP_WIDTH] = self->vout_qbuf.m.planes->reserved[VID_WIDTH];
+			self->vout_qbuf.m.planes->reserved[VID_CROP_HEIGHT] = self->vout_qbuf.m.planes->reserved[VID_HEIGHT];
+		}
+
+		ret = ioctl(self->vout_fd, VIDIOC_QBUF, &self->vout_qbuf);
+		if (ret) {
+			printf("error: VIDIOC_QBUF(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
 		}
 	}
 }
@@ -270,76 +303,6 @@ void rsc_buf_timestamp_logprint(struct v4l2_buffer *pBuf)
 			   (int)pBuf->timestamp.tv_usec	 // /1000
 	);
 }
-
-/*===========================================================================
-FUNCTION: rsc_video_push_vsync
-===========================================================================*/
-void rsc_video_push_vsync(CameraDevice* self, struct v4l2_buffer *pBuf)
-{
-	static unsigned int unique_id = 0;
-	long i_time_stamp=0;
-	signed long i_sync_time=0;
-	signed long i_buffer_id = unique_id++;
-//	signed long i_buffer_id = pBuf->index;
-//	signed long i_interlace_flag=0;
-//	unsigned long i_decID=0;
-
-//	unsigned long PA_Y;
-//	unsigned long PA_U;
-//	unsigned long PA_V;
-//	unsigned char *input_src_ptr;
-	unsigned int base[3] = {0, 0, 0};
-
-	struct tcc_lcdc_image_update_extend lcdc_display;
-
-//	input_src_ptr = (p_buffer->pBuffer);
-
-//	PA_Y = (*(input_src_ptr+3)<<24) | (*(input_src_ptr+2)<<16) | (*(input_src_ptr+1)<<8) | *(input_src_ptr) ; input_src_ptr+=4;
-//	PA_U = (*(input_src_ptr+3)<<24) | (*(input_src_ptr+2)<<16) | (*(input_src_ptr+1)<<8) | *(input_src_ptr) ; input_src_ptr+=4;
-//	PA_V = (*(input_src_ptr+3)<<24) | (*(input_src_ptr+2)<<16) | (*(input_src_ptr+1)<<8) | *(input_src_ptr) ; input_src_ptr+=4;
-
-	base[0] = (unsigned char *)(pBuf->m.offset);
-	base[1] = base[0] + (self->preview_width*self->preview_height);
-	base[2] = base[1] + (self->preview_width*self->preview_height/4);
-
-	i_sync_time 	= (signed long) (imdate() / 1000);	//(itv_clock_ConverSystem(i_decID, imdate()) / 1000);
-	i_time_stamp	= (signed long) (((mtime_t)pBuf->timestamp.tv_sec * 1000000 + (mtime_t)pBuf->timestamp.tv_usec) / 1000);	//(itv_clock_ConverSystem(i_decID, p_buffer->nTimeStamp) / 1000);
-	
-	lcdc_display.Lcdc_layer = LCDC_LAYER_0;
-	lcdc_display.enable 	= 1;
-	lcdc_display.addr0		= base[0];	//PA_Y;
-	lcdc_display.addr1		= base[1];	//PA_U;
-	lcdc_display.addr2		= base[2];	//PA_V;
-
-	lcdc_display.offset_x = 0;
-	lcdc_display.offset_y = 0;
-
-	lcdc_display.Frame_width	= self->preview_width;	//((p_priv->i_src_width + 15) >> 4) << 4;
-	lcdc_display.Frame_height	= self->preview_height; //p_priv->i_src_height;
-#if defined(_PUSH_VSYNC_TT_TEST_00_)
-	lcdc_display.Image_width	= self->fb_xres;	//p_priv->i_lcd_width;
-	lcdc_display.Image_height	= self->fb_yres;	//p_priv->i_lcd_height;
-#else
-	lcdc_display.Image_width	= self->preview_width;	//p_priv->i_lcd_width;
-	lcdc_display.Image_height	= self->preview_height; //p_priv->i_lcd_height;
-#endif
-	lcdc_display.fmt = TCC_LCDC_IMG_FMT_YUV420SP;//TCC_LCDC_IMG_FMT_YUV420ITL0;
-		
-	lcdc_display.time_stamp 		= i_time_stamp;
-	lcdc_display.sync_time			= i_sync_time;
-	lcdc_display.buffer_unique_id	= i_buffer_id;
-	lcdc_display.overlay_used_flag	= 1;
-	lcdc_display.outputMode 		= OUTPUT_NONE;
-		
-	lcdc_display.deinterlace_mode = 1;//1;//(i_interlace_flag & 0x40000000) ? 1 : 0;
-	lcdc_display.odd_first_flag = 1;//(i_interlace_flag & 0x10000000) ? 1 : 0;
-
-	lcdc_display.first_frame_after_seek = 0;//(i_interlace_flag & 0x00000001) ? 1 : 0;
-	lcdc_display.output_path			= 1;//(i_interlace_flag & 0x00000002) ? 1 : 0;
-
-	ioctl(self->fb_fd0, TCC_LCDC_VIDEO_PUSH_VSYNC, &lcdc_display);
-}
-
 
 void _get_plane_addrs(unsigned int fmt, unsigned int w, unsigned int h, 
 					unsigned int *addr_y, unsigned int *addr_u, unsigned int *addr_v)
@@ -404,22 +367,12 @@ void rsc_directly_draw_lcd(CameraDevice* self, struct v4l2_buffer *pBuf)
 	unsigned int sc_dst_w, sc_dst_h;
 	unsigned int sc_src_paddr;
 	unsigned int sc_dst_paddr;
-	unsigned int sc_src_fmt;
-	unsigned int sc_dst_fmt;
-	unsigned int base[3] = {0, 0, 0};
 	unsigned int src_base[3] = {0, 0, 0};
 	unsigned int dst_base[3] = {0, 0, 0};
-	int scaler_fd;
-	tcc_scaler_info_t src;
-	tcc_scaler_info_t dst;
 
 	#define SC_DST_BUF_NUMS	2
 	static unsigned int sc_dst_buf[SC_DST_BUF_NUMS];
 	static int sc_dst_buf_idx = -1;
-
-#if defined(_PUSH_VSYNC_)
-	rsc_video_push_vsync(self, pBuf);
-#else
 
 	#if 0
 	{
@@ -467,29 +420,49 @@ void rsc_directly_draw_lcd(CameraDevice* self, struct v4l2_buffer *pBuf)
 							   src_base[0], src_base[1], src_base[2], 
 							   dst_base[0], dst_base[1], dst_base[2]);
 
-		self->overlay_config.sx = 0;
-		self->overlay_config.sy = 0;
-		self->overlay_config.width = sc_dst_w;
-		self->overlay_config.height = sc_dst_h;
-		self->overlay_config.format = vioc2fourcc(self->preview_fmt);
+		if (self->use_vout == 0) {
+			self->overlay_config.sx = 0;
+			self->overlay_config.sy = 0;
+			self->overlay_config.width = sc_dst_w;
+			self->overlay_config.height = sc_dst_h;
+			self->overlay_config.format = vioc2fourcc(self->preview_fmt);
+		} else {
+			int ret;
+			self->vout_external_sc_fmt.type = V4L2_BUF_TYPE_VIDEO_OVERLAY;
+			self->vout_external_sc_fmt.fmt.win.w.left = 0;
+			self->vout_external_sc_fmt.fmt.win.w.top = 0;
+			self->vout_external_sc_fmt.fmt.win.w.width = sc_dst_w;
+			self->vout_external_sc_fmt.fmt.win.w.height = sc_dst_h;
+			ret = ioctl(self->vout_fd, VIDIOC_S_FMT, &self->vout_fmt);
+			if (ret) {
+				printf("error: VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OVERLAY)\n");
+			} else {
+				printf("VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OVERLAY)\n");
+				printf("    left   = %d\n", self->vout_external_sc_fmt.fmt.win.w.left);
+				printf("    top    = %d\n", self->vout_external_sc_fmt.fmt.win.w.top);
+				printf("    width  = %d\n", self->vout_external_sc_fmt.fmt.win.w.width);
+				printf("    height = %d\n", self->vout_external_sc_fmt.fmt.win.w.height);
+			}
+		}
 	}
 
 	/* update overlay configuration.
 	 * because we can display different size output.
 	 */
-	ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE, &self->overlay_config);
+	if (self->use_vout == 0) {
+		ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE, &self->overlay_config);
+	}
 
 	/* display
 	 */
 	if (self->use_scaler) {
-		rsc_set_lcd_addr(self, sc_dst_paddr);
+		rsc_v4l2_qbuf(self, sc_dst_paddr);
 	} else {
 		if (pBuf->m.offset < self->pmap_camera.base)
-			rsc_set_lcd_addr(self, pBuf->m.offset + self->pmap_camera.base);
+			rsc_v4l2_qbuf(self, pBuf->m.offset + self->pmap_camera.base);
 		else
-			rsc_set_lcd_addr(self, pBuf->m.offset);
+			rsc_v4l2_qbuf(self, pBuf->m.offset);
 	}
-#endif
 }
 
 /*===========================================================================

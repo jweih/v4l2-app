@@ -86,6 +86,14 @@ static void record_file(CameraDevice *self, struct v4l2_buffer *buf)
 		size[1] = 0;
 		size[2] = 0;
 		break;
+	case TCC_LCDC_IMG_FMT_RGB888_3:
+		base[0] = self->buffers[buf->index];
+		base[1] = NULL;
+		base[2] = NULL;
+		size[0] = tsize * 3;	// RGB888 bpp = 3
+		size[1] = 0;
+		size[2] = 0;
+		break;
 	}
 
 	fwrite(base[0], 1, size[0], self->fp);
@@ -105,114 +113,135 @@ static int _camif_init_format (CameraDevice *self, int width, int height)
     memset(&self->vid_fmt, 0,  sizeof(struct v4l2_format));
     self->vid_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	if((result = ioctl(self->fd, VIDIOC_G_FMT, &self->vid_fmt)) < 0)
-	{
-		DBug_printf(" ERROR :: cam ioctl() in function VIDIOC_G_FMT failed!\n");
+	if ((result = ioctl(self->fd, VIDIOC_G_FMT, &self->vid_fmt)) < 0) {
+		printf(" ERROR :: cam ioctl() in function VIDIOC_G_FMT failed!\n");
+		return result;
 	}
-	else
-	{
-		printf("VIDIOC_G_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
+
+	printf("VIDIOC_G_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
+	printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
+	printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
+	/* For do not use scaler 
+	 *  - if width/height is same self->vid_fmt.fmt.pix.width/height
+	 *    camera driver do not use scaler.
+	 *  - rsc.c::rsc_init_lcd()
+	 *    width: self->preview_width  = fb_info.xres;
+	 *    heght: self->preview_height = fb_info.yres;
+	 */
+	width = self->vid_fmt.fmt.pix.width;
+	height = self->vid_fmt.fmt.pix.height;
+
+	switch (self->preview_fmt) {
+	case TCC_LCDC_IMG_FMT_YUV420SP:
+	case TCC_LCDC_IMG_FMT_YUV420ITL0:
+	case TCC_LCDC_IMG_FMT_YUV420ITL1:
+		self->vid_fmt.type					= V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	    self->vid_fmt.fmt.pix.width			= width;
+	    self->vid_fmt.fmt.pix.height		= height;
+	    self->vid_fmt.fmt.pix.field			= V4L2_FIELD_INTERLACED;
+	    self->vid_fmt.fmt.pix.sizeimage		= (width * height * 3) / 2;
+		self->vid_fmt.fmt.pix.pixelformat	= vioc2fourcc(self->preview_fmt);
+	break;
+	case TCC_LCDC_IMG_FMT_YUV422SP:
+	case TCC_LCDC_IMG_FMT_YUV422ITL0:
+	case TCC_LCDC_IMG_FMT_YUV422ITL1:
+	case TCC_LCDC_IMG_FMT_UYVY:
+	case TCC_LCDC_IMG_FMT_VYUY:
+	case TCC_LCDC_IMG_FMT_YUYV:
+	case TCC_LCDC_IMG_FMT_YVYU:
+		self->vid_fmt.type					= V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		self->vid_fmt.fmt.pix.width			= width;
+		self->vid_fmt.fmt.pix.height		= height;
+		self->vid_fmt.fmt.pix.field			= V4L2_FIELD_INTERLACED;
+		self->vid_fmt.fmt.pix.sizeimage 	= width * height * 2;
+		self->vid_fmt.fmt.pix.pixelformat	= vioc2fourcc(self->preview_fmt);
+		break;
+	case TCC_LCDC_IMG_FMT_RGB888_3:
+		self->vid_fmt.type					= V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		self->vid_fmt.fmt.pix.width			= width;
+		self->vid_fmt.fmt.pix.height		= height;
+		self->vid_fmt.fmt.pix.field			= V4L2_FIELD_ANY;
+		self->vid_fmt.fmt.pix.sizeimage 	= width * height * 3;	// RGB888 bpp = 3
+		self->vid_fmt.fmt.pix.pixelformat	= vioc2fourcc(self->preview_fmt);
+		break;
+	}
+
+    if ((result = ioctl(self->fd, VIDIOC_S_FMT, &self->vid_fmt)) < 0) {
+		printf(" ERROR :: cam ioctl() in function VIDIOC_S_FMT failed!\n");
+    } else {
+		printf("VIDIOC_S_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
 		printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
 		printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
-		/* For do not use scaler 
-		 *  - if width/height is same self->vid_fmt.fmt.pix.width/height
-		 *    camera driver do not use scaler.
-		 *  - rsc.c::rsc_init_lcd()
-		 *    width: self->preview_width  = fb_info.xres;
-		 *    heght: self->preview_height = fb_info.yres;
-		 */
-		width = self->vid_fmt.fmt.pix.width;
-		height = self->vid_fmt.fmt.pix.height;
+	}
 
-		switch (self->preview_fmt) {
-		case TCC_LCDC_IMG_FMT_YUV420SP:
-		case TCC_LCDC_IMG_FMT_YUV420ITL0:
-		case TCC_LCDC_IMG_FMT_YUV420ITL1:
-			self->vid_fmt.type					= V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		    self->vid_fmt.fmt.pix.width			= width;
-		    self->vid_fmt.fmt.pix.height		= height;
-		    self->vid_fmt.fmt.pix.field			= V4L2_FIELD_INTERLACED;
-		    self->vid_fmt.fmt.pix.sizeimage		= (width * height * 3) / 2;
-			self->vid_fmt.fmt.pix.pixelformat	= vioc2fourcc(self->preview_fmt);
-			break;
-		case TCC_LCDC_IMG_FMT_YUV422SP:
-		case TCC_LCDC_IMG_FMT_YUV422ITL0:
-		case TCC_LCDC_IMG_FMT_YUV422ITL1:
-		case TCC_LCDC_IMG_FMT_UYVY:
-		case TCC_LCDC_IMG_FMT_VYUY:
-		case TCC_LCDC_IMG_FMT_YUYV:
-		case TCC_LCDC_IMG_FMT_YVYU:
-		    self->vid_fmt.type					= V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		    self->vid_fmt.fmt.pix.width			= width;
-		    self->vid_fmt.fmt.pix.height		= height;
-		    self->vid_fmt.fmt.pix.field			= V4L2_FIELD_INTERLACED;
-		    self->vid_fmt.fmt.pix.sizeimage 	= width * height * 2;
-			self->vid_fmt.fmt.pix.pixelformat	= vioc2fourcc(self->preview_fmt);
-			break;
-		}
-
-	    if((result = ioctl(self->fd, VIDIOC_S_FMT, &self->vid_fmt)) < 0)
-		{
-			DBug_printf(" ERROR :: cam ioctl() in function VIDIOC_S_FMT failed!\n");
-	    }
-		else
-		{
-			printf("VIDIOC_S_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
-			printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
-			printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
-		}
-
-#if !defined(_PUSH_VSYNC_)
+	if (self->use_vout == 0) {
 		self->overlay_config.sx = 0;
 		self->overlay_config.sy = 0;
 		self->overlay_config.width = width;
 		self->overlay_config.height = height;
 		self->overlay_config.format = self->vid_fmt.fmt.pix.pixelformat;
 		ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE, &self->overlay_config);
-		DBug_printf("[%s] OVERLAY_SET_CONFIGURE: (%d x %d) fmt(0x%x)\n", __func__, 
+		printf("[%s] OVERLAY_SET_CONFIGURE: (%d x %d) fmt(%c%c%c%c)\n", __func__,
 				self->overlay_config.width, self->overlay_config.height,
-				self->overlay_config.format);
-#endif
-
-		/* 
-		 * Setup VIQE histogram 
-		 */
-		self->viqe_type.inpath = 0;	//0: RDMA14, 1:VIN3(not used)
-		self->viqe_type.width = self->vid_fmt.fmt.pix.width;
-		self->viqe_type.height = self->vid_fmt.fmt.pix.height;
-		self->viqe_type.hoff = 10;
-		self->viqe_type.voff = 10;
-
-		self->viqe_type.xstart = 0;
-		self->viqe_type.xend = self->viqe_type.width;
-		self->viqe_type.ystart = 0;
-		self->viqe_type.yend = self->viqe_type.height;
-		
-		if ((self->viqe_type.height % self->viqe_type.hoff) == 0) {
-			sample_size = (self->viqe_type.width / self->viqe_type.hoff) * (self->viqe_type.height / self->viqe_type.voff);
-		} else {
-			sample_size = (self->viqe_type.width / self->viqe_type.hoff) * ((self->viqe_type.height / self->viqe_type.voff) + 1);
+				fourcc2char(self->overlay_config.format));
+	} else {
+		if (self->vout_status == TCC_VOUT_INITIALISING) {
+			memset(&self->vout_fmt, 0, sizeof(struct v4l2_format));
+			self->vout_fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+			self->vout_fmt.fmt.pix.width = width;
+			self->vout_fmt.fmt.pix.height = height;
+			self->vout_fmt.fmt.pix.pixelformat = self->vid_fmt.fmt.pix.pixelformat;
+			self->vout_fmt.fmt.pix.field = V4L2_FIELD_ANY;	// firstly, set ANY
+			self->vout_fmt.fmt.pix.bytesperline = 0x0;		// [16:0] Y-stride, [31:17] UV-stride
+			//self->vout_fmt.fmt.pix.colorspace;			// v4l2 driver side
+			//self->vout_fmt.fmt.pix.priv;					// not used
+			result = ioctl(self->vout_fd, VIDIOC_S_FMT, &self->vout_fmt);
+			if (result) {
+				printf("error: VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
+			} else {
+				printf("VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
+			}
 		}
-		self->viqe_type.samplesize = sample_size;
-
-		for (i = 1; i < 16; i++) {
-			self->viqe_type.seg[i - 1] = 0x10 * i;	// segment unit: 0x10
-		}
-		self->viqe_type.seg[15] = 0;
-
-		for (i = 0; i < 16; i++) {
-			self->viqe_type.scale[i] = 0xFF;
-		}
-
-		self->viqe_type.stDMA.width = self->viqe_type.width;
-		self->viqe_type.stDMA.height = self->viqe_type.height;
-		#ifdef USE_PIX_FMT_YUV420
-		self->viqe_type.stDMA.imgfmt = TCC_LCDC_IMG_FMT_YUV420SP;	// YCbCr 4:2:0 Separated format
-		#else
-		self->viqe_type.stDMA.imgfmt = TCC_LCDC_IMG_FMT_YUV422SP;	// YCbCr 4:2:2 Separated format
-		#endif
-
 	}
+
+	/* 
+	 * Setup VIQE histogram 
+	 */
+	self->viqe_type.inpath = 0;	//0: RDMA14, 1:VIN3(not used)
+	self->viqe_type.width = self->vid_fmt.fmt.pix.width;
+	self->viqe_type.height = self->vid_fmt.fmt.pix.height;
+	self->viqe_type.hoff = 10;
+	self->viqe_type.voff = 10;
+
+	self->viqe_type.xstart = 0;
+	self->viqe_type.xend = self->viqe_type.width;
+	self->viqe_type.ystart = 0;
+	self->viqe_type.yend = self->viqe_type.height;
+
+	if ((self->viqe_type.height % self->viqe_type.hoff) == 0) {
+		sample_size = (self->viqe_type.width / self->viqe_type.hoff) * (self->viqe_type.height / self->viqe_type.voff);
+	} else {
+		sample_size = (self->viqe_type.width / self->viqe_type.hoff) * ((self->viqe_type.height / self->viqe_type.voff) + 1);
+	}
+	self->viqe_type.samplesize = sample_size;
+
+	for (i = 1; i < 16; i++) {
+		self->viqe_type.seg[i - 1] = 0x10 * i;	// segment unit: 0x10
+	}
+	self->viqe_type.seg[15] = 0;
+
+	for (i = 0; i < 16; i++) {
+		self->viqe_type.scale[i] = 0xFF;
+	}
+
+	self->viqe_type.stDMA.width = self->viqe_type.width;
+	self->viqe_type.stDMA.height = self->viqe_type.height;
+	#ifdef USE_PIX_FMT_YUV420
+	self->viqe_type.stDMA.imgfmt = TCC_LCDC_IMG_FMT_YUV420SP;	// YCbCr 4:2:0 Separated format
+	#else
+	self->viqe_type.stDMA.imgfmt = TCC_LCDC_IMG_FMT_YUV422SP;	// YCbCr 4:2:2 Separated format
+	#endif
+
     return result;
 }
 
@@ -237,17 +266,17 @@ static int _camif_init_buffer(CameraDevice *self)
 	// internal buffer allocation!!
     if((result = ioctl(self->fd, VIDIOC_REQBUFS, &self->vid_buf)) < 0)
 	{
-        DBug_printf(" ERROR :: cam ioctl() in function VIDIOC_REQBUFS failed!");
+        printf(" ERROR :: cam ioctl() in function VIDIOC_REQBUFS failed!");
         exit (EXIT_FAILURE);
 	}
 	else
 	{    
 		if (self->vid_buf.count < 1) 
 		{
-	        DBug_printf("ERROR :: Insufficient buffer memory on camera\n");
+	        printf("ERROR :: Insufficient buffer memory on camera\n");
 	        exit (EXIT_FAILURE);
 	    }
-		DBug_printf(" Buffer Count : %d ..\n", self->vid_buf.count);
+		printf(" Buffer Count : %d ..\n", self->vid_buf.count);
 	}
 	
     memset(&buf, 0,  sizeof(struct v4l2_buffer));
@@ -260,7 +289,7 @@ static int _camif_init_buffer(CameraDevice *self)
 	{
         if (ioctl (self->fd, VIDIOC_QUERYBUF, &buf) < 0) 
 		{
-	        DBug_printf(" ERROR :: cam ioctl() in function VIDIOC_QUERYBUF failed!");
+	        printf(" ERROR :: cam ioctl() in function VIDIOC_QUERYBUF failed!");
 		    return -1;
 		}
 
@@ -275,13 +304,54 @@ static int _camif_init_buffer(CameraDevice *self)
 
 		if (MAP_FAILED == self->buffers[buf.index]) 
 		{
-		    DBug_printf("mmap failed\n");
+		    printf("mmap failed\n");
 		    return -1;
 		}
     }
 
 	qbuf_idx = -1;
-	
+
+	if (self->use_vout) {
+		if (self->vout_status == TCC_VOUT_INITIALISING) {
+			/*
+			 * VIDIOC_REQBUFS
+			 */
+			memset(&self->vout_rbuf, 0, sizeof(struct v4l2_requestbuffers));
+			self->vout_rbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+			self->vout_rbuf.memory = V4L2_MEMORY_USERPTR;
+			self->vout_rbuf.count = self->vid_buf.count;
+
+			result = ioctl(self->vout_fd, VIDIOC_REQBUFS, &self->vout_rbuf);
+			if (result) {
+				printf("error: VIDIOC_REQBUFS(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
+				goto exit;
+			}
+			if (self->vout_rbuf.count != self->vid_buf.count) {
+				printf("error: # of vout_bufs(%d) != # of vin_bufs(%d)\n", self->vout_rbuf.count, self->vid_buf.count);
+				goto exit;
+			}
+
+			/*
+			 * VIDIOC_QUERYBUF
+			 */
+			/* setting vid mplane */
+			memset(&self->vout_qbuf, 0, sizeof(struct v4l2_buffer));
+			self->vout_qbuf.m.planes = &(self->vout_vid_mplane);
+
+			self->vout_qbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+			self->vout_qbuf.memory = V4L2_MEMORY_USERPTR;
+
+			for (self->vout_qbuf.index = 0; self->vout_qbuf.index < self->vout_rbuf.count; self->vout_qbuf.index++) {
+				result = ioctl(self->vout_fd, VIDIOC_QUERYBUF, &self->vout_qbuf);
+				if (result) {
+					printf("error: VIDIOC_QUERYBUF(V4L2_BUF_TYPE_VIDEO_OUTPUT) index(%d)\n", self->vout_qbuf.index);
+					goto exit;
+				}
+			}
+		}
+	}
+
+exit:
     return result;
 }
 
@@ -318,29 +388,36 @@ void open_device(CameraDevice* self)
 	// 2. Open LCD Device !!
 	if((self->fb_fd0 = open(FB_DEVICE_NAME, O_RDWR)) < 0)
 	{
-		DBug_printf("ERROR ::  LCD Driver Open : fd[%d]\n", self->fb_fd0);
+		printf("ERROR ::  LCD Driver Open : fd[%d]\n", self->fb_fd0);
 		exit(1);
 	}
 
-#if !defined(_PUSH_VSYNC_)
-	if((self->overlay_fd = open(OVERLAY_DEVICE_NAME, O_RDWR)) < 0)
-	{
-		DBug_printf("ERROR ::  Overlay Driver Open : fd[%d]\n", self->overlay_fd);
-		exit(1);
+	if (self->use_vout == 0) {
+		if((self->overlay_fd = open(OVERLAY_DEVICE_NAME, O_RDWR)) < 0)
+		{
+			printf("ERROR ::  Overlay Driver Open : fd[%d]\n", self->overlay_fd);
+			exit(1);
+		}
+	} else {
+		if ((self->vout_fd = open(VOUT_DRV_NAME, O_RDWR)) < 0) {
+			printf("ERROR ::  V4l2 VOUT Driver Open : fd[%d]\n", self->vout_fd);
+			exit(1);
+		}
+		self->vout_status = TCC_VOUT_INITIALISING;
+		printf("=== V4L2 VOUT Driver (%s)===\n", VOUT_DRV_NAME);
 	}
-#endif
 
 	// open composite
 	if (self->outdisp_dev == OUTPUT_COMPOSITE) {
 		if ((self->composite_fd = open(COMPOSITE_DEVICE, O_RDWR)) < 0) {
-			DBug_printf("ERROR ::  Composite Driver Open : fd[%d]\n", self->composite_fd);
+			printf("ERROR ::  Composite Driver Open : fd[%d]\n", self->composite_fd);
 			exit(1);
 		}
 	}
 	
 	// open viqe
 	if ((self->viqe_fd = open(VIQE_DEVICE_NAME, O_RDWR)) < 0) {
-		DBug_printf("ERROR ::  VIQE Driver Open : fd[%d]\n", self->overlay_fd);
+		printf("ERROR ::  VIQE Driver Open : fd[%d]\n", self->overlay_fd);
 		//exit(1);
 	}
 
@@ -371,9 +448,10 @@ void close_device(CameraDevice* self)
 	// 2. Close LCD Device!!	
     close(self->fb_fd0);
 
-#if !defined(_PUSH_VSYNC_)
-	close(self->overlay_fd);
-#endif
+	if (self->use_vout == 0)
+		close(self->overlay_fd);
+	else
+		close(self->vout_fd);
 
 	if (self->outdisp_dev == OUTPUT_COMPOSITE)
 		close(self->composite_fd);
@@ -413,13 +491,13 @@ int camif_get_dev_info (CameraDevice *self)
 	
     if((result = ioctl (self->fd, VIDIOC_QUERYCAP, &self->vid_cap)) < 0)
 	{
-		DBug_printf(" ERROR :: cam ioctl() in _init_device_info failed");
+		printf(" ERROR :: cam ioctl() in _init_device_info failed");
     }
     else 
 	{
-		DBug_printf("Driver: %s\n", self->vid_cap.driver);
-		DBug_printf("Card: %s\n", self->vid_cap.card);
-		DBug_printf("Capabilities: 0x%x\n", (unsigned int)(self->vid_cap.capabilities));
+		printf("Driver: %s\n", self->vid_cap.driver);
+		printf("Card: %s\n", self->vid_cap.card);
+		printf("Capabilities: 0x%x\n", (unsigned int)(self->vid_cap.capabilities));
     }
 	
     return result;
@@ -443,16 +521,23 @@ int camif_get_frame(CameraDevice *self)
 	if ((res = ioctl (self->fd, VIDIOC_DQBUF, &buf)) < 0) {
 		switch(errno) {
 		case EAGAIN:
-			DBug_printf("[%s] VIDIOC_DQBUF: errno #%d (EAGAIN)\n", self->dev_name, errno);
+			printf("[%s] VIDIOC_DQBUF: errno #%d (EAGAIN)\n", self->dev_name, errno);
 			return 0;
 		case EIO:
 			default:
-			DBug_printf("[%s] VIDIOC_DQBUF: errno #%d\n", self->dev_name, errno);
+			printf("[%s] VIDIOC_DQBUF: errno #%d\n", self->dev_name, errno);
 			return -1;
 		}
 	}
 
 	buf_idx = buf.index;
+	if (self->use_vout) {
+		/* qbuf index */
+		self->vout_qbuf.index = buf.index;
+		/* dqbuf */
+		self->vout_dqbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		ioctl(self->vout_fd, VIDIOC_DQBUF, &self->vout_dqbuf);
+	}
 
 	if (self->record)
 		record_file(self, &buf);
@@ -495,13 +580,13 @@ int camif_get_frame(CameraDevice *self)
 				#endif
 
 				if (ioctl(self->viqe_fd, IOCTL_VIQE_HISTOGRAM_INIT, &self->viqe_type) < 0) {
-					DBug_printf("[cam0] error: IOCTL_VIQE_HISTOGRAM_INIT\n");
+					printf("[cam0] error: IOCTL_VIQE_HISTOGRAM_INIT\n");
 				} else {
 					if (ioctl(self->viqe_fd, IOCTL_VIQE_HISTOGRAM_EXECUTE, self->histogram) < 0) {
-						DBug_printf("[cam0] error: IOCTL_VIQE_HISTOGRAM_EXECUTE\n");
+						printf("[cam0] error: IOCTL_VIQE_HISTOGRAM_EXECUTE\n");
 					} else {
-						//DBug_printf("[%c] ", switch_flag?'W':'B');
-						DBug_printf("HISTOGRMA DATA[16] = {%4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d}\n", 
+						//printf("[%c] ", switch_flag?'W':'B');
+						printf("HISTOGRMA DATA[16] = {%4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d}\n", 
 							self->histogram[0], self->histogram[1], self->histogram[2], self->histogram[3],
 							self->histogram[4], self->histogram[5], self->histogram[6], self->histogram[7],
 							self->histogram[8], self->histogram[9], self->histogram[10], self->histogram[11],
@@ -533,15 +618,15 @@ int camif_get_frame(CameraDevice *self)
 		buf.memory = V4L2_MEMORY_MMAP;
 //		buf.index = qbuf_idx;
 		buf.index = buf_idx;
-	
+
 		if (ioctl(self->fd, VIDIOC_QBUF, &buf) < 0) {
-			DBug_printf("%s, VIDIOC_QBUF failed\n", __func__);
+			printf("%s, VIDIOC_QBUF failed\n", __func__);
 			return -1;
 		}
 	}
 
 	qbuf_idx = buf_idx;
-	
+
     return 1;
 }
 
@@ -677,23 +762,65 @@ void camif_start_stream(CameraDevice *self)
 
 	    if (ioctl (self->fd, VIDIOC_QBUF, &buf) < 0) 
 		{
-			DBug_printf("VIDIOC_QBUF\n");
+			printf("VIDIOC_QBUF\n");
 			exit(EXIT_FAILURE);
 	    }
 	}
 
+#ifdef CM3_EARLY_VIEW
+	printf("Cortex-M3 +++\n");
+
+	/* Open tcc_cm3_ctrl */
+	self->cm3_fd = open(CM3_DRV_NAME, O_RDWR);
+	if (self->cm3_fd < 0) {
+		printf("ERROR :: %s open failed(%d)\n", CM3_DRV_NAME, self->cm3_fd);
+		goto cm3_exit;
+	}
+
+	/* Init CM3 */
+	if (ioctl(self->cm3_fd, IOCTL_CM3_CTRL_ON, &self->cm3_cmd) < 0) {
+		printf("ERROR :: %s IOCTL_CM3_CTRL_ON\n", CM3_DRV_NAME);
+		exit(EXIT_FAILURE);
+	}
+
+	/* Stop and disable R-CAM */
+	self->cm3_cmd.iOpCode = SET_EARLY_CAMERA_STOP;
+	if (ioctl(self->cm3_fd, IOCTL_CM3_CTRL_CMD, &self->cm3_cmd) < 0) {
+		printf("ERROR :: %s IOCTL_CM3_CTRL_CMD\n", CM3_DRV_NAME);
+		exit(EXIT_FAILURE);
+	}
+
+	/* Disable CM3 */
+	if (ioctl(self->cm3_fd, IOCTL_CM3_CTRL_OFF, &self->cm3_cmd) < 0) {
+		printf("ERROR :: %s IOCTL_CM3_CTRL_OFF\n", CM3_DRV_NAME);
+		exit(EXIT_FAILURE);
+	}
+
+cm3_exit:
+	/* Close CM3 */
+	close(self->cm3_fd);
+	printf("Cortex-M3 ---\n");
+#endif
+
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl (self->fd, VIDIOC_STREAMON, &type) < 0) 
 	{
-		DBug_printf("ERROR :: Can't VIDIOC_STREAMON\n");
+		printf("ERROR :: Can't VIDIOC_STREAMON\n");
 		exit(EXIT_FAILURE);
 	}
 
 	self->cam_mode = MODE_PREVIEW;
 
-#if defined(_PUSH_VSYNC_)
-	ioctl(self->fb_fd0, TCC_LCDC_VIDEO_START_VSYNC, 5);//VOUT_VPU_BUFF_COUNT);
-#endif
+	if (self->use_vout) {
+		int ret;
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		ret = ioctl(self->vout_fd, VIDIOC_STREAMON, &type);
+		if (ret) {
+			printf("error: VIDIOC_STREAMON(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
+			exit(EXIT_FAILURE);
+		}
+		self->vout_status = TCC_VOUT_RUNNING;
+	}
 }
 
 /*===========================================================================
@@ -708,15 +835,22 @@ void camif_stop_stream(CameraDevice *self)
 	
 	if (ioctl (self->fd, VIDIOC_STREAMOFF, &type) < 0) 
 	{
-		DBug_printf("ERROR :: Can't VIDIOC_STREAMOFF\n");
+		printf("ERROR :: Can't VIDIOC_STREAMOFF\n");
 		exit(EXIT_FAILURE);
 	}
 
 	self->cam_mode = MODE_PREVIEW_STOP;
 
-#if defined(_PUSH_VSYNC_)
-	ioctl(self->fb_fd0, TCC_LCDC_VIDEO_END_VSYNC, 0);
-#endif
+	if (self->use_vout) {
+		int ret;
+		type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		ret = ioctl(self->vout_fd, VIDIOC_STREAMOFF, &type);
+		if (ret) {
+			printf("error: VIDIOC_STREAMOFF(V4L2_BUF_TYPE_VIDEO_OUTPUT)\n");
+			exit(EXIT_FAILURE);
+		}
+		self->vout_status = TCC_VOUT_STOP;
+	}
 }
 
 /*===========================================================================

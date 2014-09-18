@@ -18,11 +18,9 @@ when        who       what, where, why
                            LCD InterFace
 ===========================================================================*/
 extern void rsc_init_lcd(CameraDevice* self);
-extern void rsc_set_lcd_ch0(CameraDevice* self, unsigned char en);
-extern void rsc_set_lcd_addr(CameraDevice* self, unsigned int addr);
+extern void rsc_overlay_ctrl(CameraDevice* self, unsigned char en);
+extern void rsc_v4l2_qbuf(CameraDevice* self, unsigned int addr);
 extern void rsc_draw_lcd(CameraDevice* self);
-
-extern void rsc_video_push_vsync(CameraDevice* self, struct v4l2_buffer *pBuf);
 extern void rsc_directly_draw_lcd(CameraDevice* self, struct v4l2_buffer *pBuf);
 
 /*===========================================================================

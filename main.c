@@ -16,7 +16,8 @@ when        who       what, where, why
 ===========================================================================*/
 #include "main.h"
 
-int debug_flg;
+/* for auto_start */
+static int auto_start;
 
 /**************************************************************************/
 /*                         Util functions                                 */
@@ -101,6 +102,7 @@ unsigned int select_preview_format()
 		printf("  7: YCbCr 4:2:2 VYUY Sequential\n");
 		printf("  8: YCbCr 4:2:2 YUYV Sequential\n");
 		printf("  9: YCbCr 4:2:2 YVYU Sequential\n");
+		printf("  a: RGB   8:8:8 3bytes\n");
 
 		usleep(100000);
 		key = wait_press_anykey();
@@ -135,6 +137,9 @@ unsigned int select_preview_format()
 			break;
 		case '9':
 			fmt = TCC_LCDC_IMG_FMT_YVYU;
+			break;
+		case 'a':
+			fmt = TCC_LCDC_IMG_FMT_RGB888_3;	// VIOC_IMG_FMT_RGB888
 			break;
 		default:
 			break;
@@ -303,20 +308,20 @@ void* handle_stdin(void* param)
 	char cmdline[1024];
 	int r;
 
-	if (dev[0].auto_start)
+	if (auto_start)
 		goto auto_start;
 
 	while (1)
 	{
 		usleep(1000*100);
 
-		if (dev[0].auto_start)
+		if (auto_start)
 			continue;
 
 		// 1. Get Command!!
 		memset(cmdline,0x00,1024);		
 		if((r = read(STDIN_FILENO, cmdline, 1024)) == 0) 
-			DBug_printf(" Wrong input!! \n");
+			printf(" Wrong input!! \n");
 
 		// 2. Process Function!!
 		if (!strncmp("start", cmdline, 5))
@@ -329,7 +334,7 @@ auto_start:
 
 			camif_set_resolution(dev, dev->preview_width, dev->preview_height);
 			camif_start_stream(dev);
-			rsc_set_lcd_ch0(dev, 1);
+			rsc_overlay_ctrl(dev, 1);
 		}
 		else if (!strncmp("quit", cmdline, 4)) 
 		{
@@ -338,25 +343,7 @@ auto_start:
 		else if (!strncmp("stop", cmdline, 4)) 
 		{
 			camif_stop_stream(dev);
-			rsc_set_lcd_ch0(dev, 0);
-		}
-		else if (!strncmp("debug_on", cmdline, 8))
-		{
-			debug_flg = 1;
-		}
-		else if (!strncmp("debug_off", cmdline, 9))
-		{
-			debug_flg = 0;
-		}
-		else if (!strncmp("fb_on", cmdline, 5))
-		{
-			if(dev->fb_fd0 >= 0)
-				ioctl(dev->fb_fd0,TCC_LCDC_SET_ENABLE, NULL);
-		}
-		else if (!strncmp("fb_off", cmdline, 6))
-		{
-			if(dev->fb_fd0 >= 0)
-				ioctl(dev->fb_fd0,TCC_LCDC_SET_DISABLE, NULL);
+			rsc_overlay_ctrl(dev, 0);
 		}
 		/*----------------------------------------------------------------
 		 * V4L2_CID_XXX Control
@@ -440,8 +427,8 @@ auto_start:
 
 			if (*(args) < '0' || *(args) > '1') 
 			{
-				DBug_printf("usage : overlay [overlay_value]\n");
-				DBug_printf("ex) overlay 1\n");
+				printf("usage : overlay [overlay_value]\n");
+				printf("ex) overlay 1\n");
 				continue;
 			}   
 			camif_set_overlay(dev, *(args)-'0');
@@ -520,7 +507,7 @@ auto_start:
 		}
 		else
 		{
-			DBug_printf("invalid input\n\n");
+			printf("invalid input\n\n");
 		}
 	}
 
@@ -536,20 +523,20 @@ void* handle_stdin_multi(void* param)
 	unsigned int prev_w, prev_h;
 	unsigned int sx, sy, w, h, fmt;
 
-	if (dev[0].auto_start)
+	if (auto_start)
 		goto auto_start;
 
 	while (1)
 	{		
 		usleep(1000*100);
 
-		if (dev[0].auto_start)
+		if (auto_start)
 			continue;
 	
 		// 1. Get Command!!
 		memset(cmdline, 0, 32);		
 		if((r = read(STDIN_FILENO, cmdline, 32)) == 0) 
-			DBug_printf(" Wrong input!! \n");
+			printf(" Wrong input!! \n");
 
 		// 2. Process Function!!
 		if (!strncmp("start", cmdline, 5))
@@ -580,7 +567,7 @@ auto_start:
 					camif_start_stream(&dev[i]);
 
 					if (first == 1) {
-						rsc_set_lcd_ch0(&dev[i], 1);
+						rsc_overlay_ctrl(&dev[i], 1);
 						dev[i].display = 1;		// default dispaly on
 					}
 				}
@@ -631,7 +618,7 @@ auto_start:
 			for (i = 0; i < DEVICE_NR; i++) {
 				if (dev[i].use) {
 					camif_stop_stream(&dev[i]);
-					rsc_set_lcd_ch0(&dev[i], 0);
+					rsc_overlay_ctrl(&dev[i], 0);
 				}
 			}
 		}
@@ -701,7 +688,7 @@ auto_start:
 		}
 		else
 		{
-			DBug_printf("invalid input\n\n");
+			printf("invalid input\n\n");
 		}
 	}
 
@@ -796,6 +783,7 @@ unsigned int f2d_type = 0;
 unsigned int f2d_opt  = 0;
 
 static int use_scaler = 0;
+static int use_vout = 0;
 int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *single_nr, int *output, int *option)
 {
 	int ret = 0;
@@ -804,7 +792,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 	int width = 0, height = 0;
 	int i2c_slave_addr = 0;
 	char *i2c_dev_port = NULL;
-	int auto_start = 0;
 	static struct option long_opt[] = {
 		{"device", 1, 0, 'd'},
 		{"output", 1, 0, 'o'},
@@ -821,7 +808,7 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		int c = 0;
 		int option_idx = 0;
 
-		c = getopt_long(argc, argv, "xdso:w:h:t:a:p:f:c:", long_opt, &option_idx);
+		c = getopt_long(argc, argv, "xdsvo:w:h:t:a:p:f:c:", long_opt, &option_idx);
 		if (c == -1) { break; }
 
 		switch (c) {
@@ -843,6 +830,9 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 				*output = OUTPUT_COMPONENT;
 			else
 				ret = -1;
+			break;
+		case 'v':
+			use_vout = 1;
 			break;
 		case 's':
 			use_scaler = 1;
@@ -920,8 +910,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 					}
 					printf("i2c: 0x%x, %s\n", dev[i].i2c_slave_addr, dev[i].i2c_dev_port);
 				}
-
-				dev[i].auto_start = auto_start;
 			} else {
 				ret = -1;
 			}
@@ -959,11 +947,16 @@ int main(int argc, char *argv[])
 	/*
 	 * choice preview image format
 	 */
-	if (use_scaler == 1 || dev[0].auto_start) {
+	if (use_scaler == 1 || auto_start) {
 		preview_fmt = TCC_LCDC_IMG_FMT_YUV420SP;
 		printf("Preview Image Format: YCbCr 4:2:0 Separated\n");
 	} else {
 		preview_fmt = select_preview_format();
+	}
+
+	if (use_vout && single > 1) {
+		printf("error: V4L2 VOUT driver only supports single VIN driver.\n");
+		return -1;
 	}
 
     /*
@@ -972,9 +965,10 @@ int main(int argc, char *argv[])
 	for (i = 0; i < DEVICE_NR; i++) {
 		if (dev[i].use) {
 			dev[i].camdev = i;
+			dev[i].use_vout = use_vout;
 			init_camera_data(&dev[i], preview_fmt, option);
 			if ((dev[i].fd = open(dev[i].dev_name, O_RDWR)) < 0) {
-				DBug_printf("error: driver open fail (%s)\n", dev[i].dev_name);
+				printf("error: driver open fail (%s)\n", dev[i].dev_name);
 				return -1;
 		    }
 
@@ -1001,7 +995,7 @@ int main(int argc, char *argv[])
 		}
     }
 
-	DBug_printf("CAMERA Start Ready!!! \n");
+	printf("CAMERA Start Ready!!! \n");
 
 	/*
 	 * IPC-Main Loop
