@@ -16,7 +16,6 @@ when        who       what, where, why
 
 ===========================================================================*/
 #include "main.h"
-#include "tcc_scaler_interface.h"
 
 #define PANEL_WIDTH "/sys/devices/virtual/tcc_dispman/tcc_dispman/tcc_output_panel_width"
 #define PANEL_HEIGHT "/sys/devices/virtual/tcc_dispman/tcc_dispman/tcc_output_panel_height"
@@ -238,21 +237,12 @@ void rsc_v4l2_qbuf(CameraDevice* self, unsigned int addr)
 		self->vout_qbuf.m.planes->reserved[VID_SRC] = MPLANE_VID;
 		self->vout_qbuf.m.planes->reserved[VID_NUM] = 1;
 
-		if (self->use_scaler) {
-			self->vout_qbuf.m.planes->reserved[VID_WIDTH] = self->vout_external_sc_fmt.fmt.win.w.width;
-			self->vout_qbuf.m.planes->reserved[VID_HEIGHT] = self->vout_external_sc_fmt.fmt.win.w.height;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_LEFT] = self->vout_external_sc_fmt.fmt.win.w.left;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_TOP] = self->vout_external_sc_fmt.fmt.win.w.top;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_WIDTH] = self->vout_external_sc_fmt.fmt.win.w.width;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_HEIGHT] = self->vout_external_sc_fmt.fmt.win.w.height;
-		} else {
-			self->vout_qbuf.m.planes->reserved[VID_WIDTH] = self->vout_fmt.fmt.pix.width;
-			self->vout_qbuf.m.planes->reserved[VID_HEIGHT] = self->vout_fmt.fmt.pix.height;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_LEFT] = 0;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_TOP] = 0;
-			self->vout_qbuf.m.planes->reserved[VID_CROP_WIDTH] = self->vout_qbuf.m.planes->reserved[VID_WIDTH];
-			self->vout_qbuf.m.planes->reserved[VID_CROP_HEIGHT] = self->vout_qbuf.m.planes->reserved[VID_HEIGHT];
-		}
+		self->vout_qbuf.m.planes->reserved[VID_WIDTH] = self->vout_fmt.fmt.pix.width;
+		self->vout_qbuf.m.planes->reserved[VID_HEIGHT] = self->vout_fmt.fmt.pix.height;
+		self->vout_qbuf.m.planes->reserved[VID_CROP_LEFT] = 0;
+		self->vout_qbuf.m.planes->reserved[VID_CROP_TOP] = 0;
+		self->vout_qbuf.m.planes->reserved[VID_CROP_WIDTH] = self->vout_qbuf.m.planes->reserved[VID_WIDTH];
+		self->vout_qbuf.m.planes->reserved[VID_CROP_HEIGHT] = self->vout_qbuf.m.planes->reserved[VID_HEIGHT];
 
 		ret = ioctl(self->vout_fd, VIDIOC_QBUF, &self->vout_qbuf);
 		if (ret) {
@@ -354,98 +344,11 @@ void _get_plane_addrs(unsigned int fmt, unsigned int w, unsigned int h,
 	*addr_v = base[2];
 }
 
-
-pmap_t pmap_sc;
-static int pmap_sc_init = 0;
-
 /*===========================================================================
 FUNCTION
 ===========================================================================*/
 void rsc_directly_draw_lcd(CameraDevice* self, struct v4l2_buffer *pBuf)
 {
-	unsigned int sc_src_w, sc_src_h;
-	unsigned int sc_dst_w, sc_dst_h;
-	unsigned int sc_src_paddr;
-	unsigned int sc_dst_paddr;
-	unsigned int src_base[3] = {0, 0, 0};
-	unsigned int dst_base[3] = {0, 0, 0};
-
-	#define SC_DST_BUF_NUMS	2
-	static unsigned int sc_dst_buf[SC_DST_BUF_NUMS];
-	static int sc_dst_buf_idx = -1;
-
-	#if 0
-	{
-		static int ttcnt = 0;
-		if ((ttcnt++%10) != 0)
-			return;
-	}
-	#endif
-
-	if (self->use_scaler) {
-		if (pmap_sc_init == 0) {
-			//pmap_get_info("fb_scale", &pmap_sc);
-			pmap_get_info("video", &pmap_sc);
-			pmap_sc_init = 1;
-		}
-
-		sc_src_w = self->vid_fmt.fmt.pix.width/*self->output_width*/;
-		sc_src_h = self->vid_fmt.fmt.pix.height/*self->output_height*/;
-		sc_dst_w = self->preview_width;
-		sc_dst_h = self->preview_height;
-
-		sc_dst_buf[0] = pmap_sc.base;
-		sc_dst_buf[1] = sc_dst_buf[0] + ((sc_dst_w*sc_dst_h*2)/1024 +1)*1024;
-
-		if ((sc_dst_buf_idx%(SC_DST_BUF_NUMS)) == 0)
-			sc_dst_buf_idx = 0;
-		
-		if (pBuf->m.offset < self->pmap_camera.base)
-			sc_src_paddr = pBuf->m.offset + self->pmap_camera.base;
-		else
-			sc_src_paddr = pBuf->m.offset;
-
-		///sc_dst_paddr = pmap_sc.base;
-		//sc_dst_paddr = sc_dst_buf[0];
-		sc_dst_paddr = sc_dst_buf[sc_dst_buf_idx++];
-
-		src_base[0] = sc_src_paddr;
-		_get_plane_addrs(self->preview_fmt, sc_src_w, sc_src_h, &src_base[0], &src_base[1], &src_base[2]);
-
-		dst_base[0] = sc_dst_paddr;
-		_get_plane_addrs(self->preview_fmt, sc_dst_w, sc_dst_h, &dst_base[0], &dst_base[1], &dst_base[2]);
-
-		tcc_scaler_yuv420_full(sc_src_w, sc_src_h, sc_src_w, sc_src_h, 
-							   sc_dst_w, sc_dst_h, sc_dst_w, sc_dst_h, 
-							   src_base[0], src_base[1], src_base[2], 
-							   dst_base[0], dst_base[1], dst_base[2]);
-
-		if (self->use_vout == 0) {
-			self->overlay_config.sx = 0;
-			self->overlay_config.sy = 0;
-			self->overlay_config.width = sc_dst_w;
-			self->overlay_config.height = sc_dst_h;
-			self->overlay_config.format = vioc2fourcc(self->preview_fmt);
-		} else {
-			int ret;
-			self->vout_external_sc_fmt.type = V4L2_BUF_TYPE_VIDEO_OVERLAY;
-			self->vout_external_sc_fmt.fmt.win.w.left = 0;
-			self->vout_external_sc_fmt.fmt.win.w.top = 0;
-			self->vout_external_sc_fmt.fmt.win.w.width = sc_dst_w;
-			self->vout_external_sc_fmt.fmt.win.w.height = sc_dst_h;
-			ret = ioctl(self->vout_fd, VIDIOC_S_FMT, &self->vout_fmt);
-			if (ret) {
-				printf("error: VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OVERLAY)\n");
-			} else {
-				printf("VIDIOC_S_FMT(V4L2_BUF_TYPE_VIDEO_OVERLAY)\n");
-				printf("    left   = %d\n", self->vout_external_sc_fmt.fmt.win.w.left);
-				printf("    top    = %d\n", self->vout_external_sc_fmt.fmt.win.w.top);
-				printf("    width  = %d\n", self->vout_external_sc_fmt.fmt.win.w.width);
-				printf("    height = %d\n", self->vout_external_sc_fmt.fmt.win.w.height);
-			}
-		}
-	}
-
 	/* update overlay configuration.
 	 * because we can display different size output.
 	 */
@@ -455,14 +358,10 @@ void rsc_directly_draw_lcd(CameraDevice* self, struct v4l2_buffer *pBuf)
 
 	/* display
 	 */
-	if (self->use_scaler) {
-		rsc_v4l2_qbuf(self, sc_dst_paddr);
-	} else {
-		if (pBuf->m.offset < self->pmap_camera.base)
-			rsc_v4l2_qbuf(self, pBuf->m.offset + self->pmap_camera.base);
-		else
-			rsc_v4l2_qbuf(self, pBuf->m.offset);
-	}
+	if (pBuf->m.offset < self->pmap_camera.base)
+		rsc_v4l2_qbuf(self, pBuf->m.offset + self->pmap_camera.base);
+	else
+		rsc_v4l2_qbuf(self, pBuf->m.offset);
 }
 
 /*===========================================================================

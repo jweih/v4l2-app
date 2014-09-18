@@ -331,7 +331,6 @@ typedef struct {
 
 	/* option */
 	int use;
-	int use_scaler;
 	int timestamp;	// display time-stamp
 	int record;		// recording
 	FILE *fp;

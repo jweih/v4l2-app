@@ -68,7 +68,6 @@ INC_PATH	+= -I$(KDIR)/arch/arm/mach-tcc893x/include/mach
 C_OBJ		=  $(SRC_PATH)/v4l2.o\
 			   $(SRC_PATH)/main.o\
 			   $(SRC_PATH)/pmap.o\
-			   $(SRC_PATH)/tcc_scaler_interface.o\
 			   $(SRC_PATH)/rsc.o
 
 C_SRCS		=  $(C_OBJ:.o=.c)

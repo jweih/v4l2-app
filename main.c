@@ -733,14 +733,6 @@ void help_msg(void)
            "|         // Ctrl-Z\n"
            "|       $ camapp -d 0 1 2 3 -o composite -w 720 -h 480\n"
            "|\n"
-           "| <Using Scaler>\n"
-           "|  -s\n"
-           "|     if you use this option, can use scaler path.\n"
-           "|     /dev/scaler (SC1)\n"
-           "|     (video format: YCbCr 4:2:0 Separated)\n"
-           "|    ex) using scaler\n"
-           "|       $ camapp -d 0 -s\n"
-           "|\n"
            "|  <Test FILT2D>\n"
            "|    -f [filter mode (0: disable, 1: HPF, 2: LPF, 3: Simple3X3WinFilter]\n"
            "|    -c [filter option (HPF/LPF: 0~5, Simple: 0~2)]\n"
@@ -779,10 +771,6 @@ void help_msg(void)
            "------------------------------------------------------------\n");
 }
 
-unsigned int f2d_type = 0;
-unsigned int f2d_opt  = 0;
-
-static int use_scaler = 0;
 static int use_vout = 0;
 int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *single_nr, int *output, int *option)
 {
@@ -795,7 +783,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 	static struct option long_opt[] = {
 		{"device", 1, 0, 'd'},
 		{"output", 1, 0, 'o'},
-		{"scaler", 1, 0, 's'},
 		{"out_width", 1, 0, 'w'},
 		{"out_height", 1, 0, 'h'},
 		{"option", 1, 0, 't'},
@@ -808,7 +795,7 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		int c = 0;
 		int option_idx = 0;
 
-		c = getopt_long(argc, argv, "xdsvo:w:h:t:a:p:f:c:", long_opt, &option_idx);
+		c = getopt_long(argc, argv, "xdvo:w:h:t:a:p:", long_opt, &option_idx);
 		if (c == -1) { break; }
 
 		switch (c) {
@@ -834,9 +821,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		case 'v':
 			use_vout = 1;
 			break;
-		case 's':
-			use_scaler = 1;
-			break;
 		case 'w':
 			width = atoi(optarg);
 			break;
@@ -858,12 +842,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		case 'p':
 			i2c_dev_port = tcc_malloc_string(optarg);
 			break;
-		case 'f':
-			f2d_type = atoi(optarg);
-			break;
-		case 'c':
-			f2d_opt = atoi(optarg);
-			break;
 		default:
 			printf("invalid argument: optarg[%s]\n", optarg);
 			ret = -1;
@@ -879,13 +857,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		goto exit;
 	}
 
-	/* check option */
-	if ((use_scaler == 1) && (*output != OUTPUT_NONE)) {
-		printf("error: Can not use '-s' and '-o' at the same time.\n");
-		ret = -1;
-		goto exit;
-	}
-
 	if (device) {
 		while (optind < argc) {
 			int i = atoi(argv[optind]);
@@ -893,7 +864,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 				*single += 1;
 				*single_nr = i;
 				dev[i].use = 1;
-				dev[i].use_scaler = use_scaler;
 				dev[i].outdisp_dev = *output;
 				dev[i].output_width = width;
 				dev[i].output_height = height;
@@ -947,7 +917,7 @@ int main(int argc, char *argv[])
 	/*
 	 * choice preview image format
 	 */
-	if (use_scaler == 1 || auto_start) {
+	if (auto_start) {
 		preview_fmt = TCC_LCDC_IMG_FMT_YUV420SP;
 		printf("Preview Image Format: YCbCr 4:2:0 Separated\n");
 	} else {
