@@ -418,14 +418,6 @@ void open_device(CameraDevice* self)
 		self->vout_status = TCC_VOUT_INITIALISING;
 		printf("=== V4L2 VOUT Driver (%s)===\n", VOUT_DRV_NAME);
 	}
-
-	// open composite
-	if (self->outdisp_dev == OUTPUT_COMPOSITE) {
-		if ((self->composite_fd = open(COMPOSITE_DEVICE, O_RDWR)) < 0) {
-			printf("ERROR ::  Composite Driver Open : fd[%d]\n", self->composite_fd);
-			exit(1);
-		}
-	}
 	
 	// open viqe
 	if ((self->viqe_fd = open(VIQE_DEVICE_NAME, O_RDWR)) < 0) {
@@ -464,9 +456,6 @@ void close_device(CameraDevice* self)
 		close(self->overlay_fd);
 	else
 		close(self->vout_fd);
-
-	if (self->outdisp_dev == OUTPUT_COMPOSITE)
-		close(self->composite_fd);
 
 	// close viqe device
 	close(self->viqe_fd);

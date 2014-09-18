@@ -61,45 +61,6 @@ void rsc_init_lcd(CameraDevice* self)
 	printf("- get output panel size: %dx%d\n", panel_width, panel_height);
 	printf("- get framebuffer size : %dx%d\n", fb_info.xres, fb_info.yres);
 	printf("- set preview size     : %dx%d\n", self->preview_width, self->preview_height);
-
-	if (self->outdisp_dev) {
-		self->outdisp_info.enable		= 1;
-		self->outdisp_info.Lcdc_layer	= LCDC_LAYER_2;
-		self->outdisp_info.fmt			= self->preview_fmt;
-
-		self->outdisp_info.offset_x		= fb_info.xoffset;
-		self->outdisp_info.offset_y		= fb_info.yoffset;
-
-		self->outdisp_info.Frame_width	= self->vid_fmt.fmt.pix.width;
-		self->outdisp_info.Frame_height	= self->vid_fmt.fmt.pix.height;
-
-		self->outdisp_info.crop_left	= 0;
-		self->outdisp_info.crop_top		= 0;
-		self->outdisp_info.crop_right	= self->output_width;
-		self->outdisp_info.crop_bottom	= self->output_height;
-
-		self->outdisp_info.Image_width	= self->vid_fmt.fmt.pix.width;
-		self->outdisp_info.Image_height	= self->vid_fmt.fmt.pix.height;
-		
-		self->outdisp_info.outputMode	= OUTPUT_COMPOSITE;
-		self->outdisp_info.on_the_fly	= 0;
-	}
-
-	//if (self->outdisp_dev) {
-	//	switch (self->outdisp_dev) {
-	//	case OUTPUT_HDMI:
-	//		ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-	//		printf("Output display: HDMI\n");
-	//		break;
-	//	case OUTPUT_COMPOSITE:
-	//		ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
-	//		printf("Output display: Composite\n");
-	//		break;
-	//	case OUTPUT_COMPONENT:
-	//		printf("Not support component output\n");
-	//		break;
-	//	}
-	//}
 }
 
 /*===========================================================================
@@ -182,46 +143,6 @@ void rsc_v4l2_qbuf(CameraDevice* self, unsigned int addr)
 
 	if (self->use_vout == 0) {
 		ioctl(self->overlay_fd, OVERLAY_QUEUE_BUFFER,base);
-
-		if (self->outdisp_dev) {
-			self->outdisp_info.addr0 = base[0];
-			self->outdisp_info.addr1 = base[1];
-			self->outdisp_info.addr2 = base[2];
-			self->outdisp_info.Frame_width	= self->vid_fmt.fmt.pix.width;
-			self->outdisp_info.Frame_height	= self->vid_fmt.fmt.pix.height;
-			self->outdisp_info.Image_width	= self->vid_fmt.fmt.pix.width;
-			self->outdisp_info.Image_height	= self->vid_fmt.fmt.pix.height;
-
-			switch (self->outdisp_dev) {
-			case OUTPUT_HDMI:
-				#if 1
-				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-				#else
-				self->outdisp_info.Lcdc_layer = LCDC_LAYER_2;
-				self->outdisp_info.offset_x = 0;
-				self->outdisp_info.offset_y = 0;
-				self->outdisp_info.crop_right = 960;
-				//self->outdisp_info.enable = 0;
-				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-
-				self->outdisp_info.Lcdc_layer = LCDC_LAYER_1;
-				self->outdisp_info.offset_x = 960;
-				self->outdisp_info.offset_y = 0;
-				self->outdisp_info.crop_right = 960;
-				//self->outdisp_info.enable = 1;
-				//self->outdisp_info.addr1 = base[2];
-				//self->outdisp_info.addr2 = base[1];
-				ioctl(self->fb_fd0, TCC_LCDC_HDMI_DISPLAY, &self->outdisp_info);
-				#endif
-				break;
-			case OUTPUT_COMPOSITE:
-				ioctl(self->composite_fd, TCC_COMPOSITE_IOCTL_UPDATE, &self->outdisp_info);
-				break;
-			case OUTPUT_COMPONENT:
-				printf("Not support component output\n");
-				break;
-			}
-		}
 	} else {
 		int ret;
 	

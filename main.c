@@ -716,33 +716,6 @@ void help_msg(void)
            "|       $ camapp -d 0 1 2 3\n"
            "|\n"
            "| ------ for debugging options -----\n"
-           "| <Display sensor image to external-output>\n"
-           "|  * First of all, you have to set output display config using 'extenddisplay' program\n"
-           "|  -o [output display device]\n"
-           "|       hdmi: hdmi output\n"
-           "|       composite: composite output\n"
-           "|  -w [output display width]\n"
-           "|  -h [output display height]\n"
-           "|       -w 720 -h 480\n"
-           "|    ex) hdmi output, /dev/video0\n"
-           "|       $ extenddisply\n"
-           "|         // Ctrl-Z\n"
-           "|       $ camapp -d 0 -o hdmi -w 1280 -h 720\n"
-           "|    ex) composite output, /dev/video0, 1, 2, 3\n"
-           "|       $ extenddisply\n"
-           "|         // Ctrl-Z\n"
-           "|       $ camapp -d 0 1 2 3 -o composite -w 720 -h 480\n"
-           "|\n"
-           "|  <Test FILT2D>\n"
-           "|    -f [filter mode (0: disable, 1: HPF, 2: LPF, 3: Simple3X3WinFilter]\n"
-           "|    -c [filter option (HPF/LPF: 0~5, Simple: 0~2)]\n"
-           "|    ex) HPF test: -s -f 1 -c [0~5]\n"
-           "|       $ camapp -d 0 -s -f 1 -c 3\n"
-           "|    ex) LPF test: -s -f 2 -c [0~5]\n"
-           "|       $ camapp -d 0 -s -f 2 -c 3\n"
-           "|    ex) SM test:  -s -f 3 -c [0~2]\n"
-           "|       $ camapp -d 0 -s -f 3 -c 1\n"
-           "|\n"
            "| <Time-Stamp & Recoding file>\n"
            "|  * ONLY support single channel\n"
            "|  -t [option]\n"
@@ -772,7 +745,7 @@ void help_msg(void)
 }
 
 static int use_vout = 0;
-int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *single_nr, int *output, int *option)
+int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *single_nr, int *option)
 {
 	int ret = 0;
 	int device = 0;
@@ -782,7 +755,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 	char *i2c_dev_port = NULL;
 	static struct option long_opt[] = {
 		{"device", 1, 0, 'd'},
-		{"output", 1, 0, 'o'},
 		{"out_width", 1, 0, 'w'},
 		{"out_height", 1, 0, 'h'},
 		{"option", 1, 0, 't'},
@@ -795,7 +767,7 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		int c = 0;
 		int option_idx = 0;
 
-		c = getopt_long(argc, argv, "xdvo:w:h:t:a:p:", long_opt, &option_idx);
+		c = getopt_long(argc, argv, "xdv:w:h:t:a:p:", long_opt, &option_idx);
 		if (c == -1) { break; }
 
 		switch (c) {
@@ -806,17 +778,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 			break;
 		case 'd':
 			device = 1;
-			break;
-		case 'o':
-			mode = tcc_malloc_string(optarg);
-			if (strcmp(mode, "hdmi") == 0)
-				*output = OUTPUT_HDMI;
-			else if (strcmp(mode, "composite") == 0)
-				*output = OUTPUT_COMPOSITE;
-			else if (strcmp(mode, "component") == 0)
-				*output = OUTPUT_COMPONENT;
-			else
-				ret = -1;
 			break;
 		case 'v':
 			use_vout = 1;
@@ -849,14 +810,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 		}
 	}
 
-	/* check output display */
-	if ((*output != OUTPUT_NONE) 
-		&& (width == 0 || height == 0)) {
-		printf("error: Need output size argument '-w [width] -h [height]'\n");
-		ret = -1;
-		goto exit;
-	}
-
 	if (device) {
 		while (optind < argc) {
 			int i = atoi(argv[optind]);
@@ -864,7 +817,6 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *single, int *sing
 				*single += 1;
 				*single_nr = i;
 				dev[i].use = 1;
-				dev[i].outdisp_dev = *output;
 				dev[i].output_width = width;
 				dev[i].output_height = height;
 				sprintf(dev[i].dev_name, "/dev/video%d", i);
@@ -897,7 +849,7 @@ int main(int argc, char *argv[])
 {
 	int i, /*arg = 0,*/ first = 0;
 	int single = 0, single_nr = 0;
-	int option = 0, output = OUTPUT_NONE;
+	int option = 0;
 	CameraDevice dev[DEVICE_NR];
 	unsigned int preview_fmt;
 	int fb_fd, overlay_fd, composite_fd, viqe_fd, i2c_fd;
@@ -909,7 +861,7 @@ int main(int argc, char *argv[])
 
 	memset(dev, 0, sizeof(CameraDevice) * DEVICE_NR);
 
-	if (parse_args(argc, argv, dev, &single, &single_nr, &output, &option)) {
+	if (parse_args(argc, argv, dev, &single, &single_nr, &option)) {
 		help_msg();
 		return -1;
 	}

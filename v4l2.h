@@ -49,54 +49,6 @@ when        who       what, where, why
 #define	TCC_LCDC_VIDEO_GET_DISPLAYED	0x0063
 #define	TCC_LCDC_VIDEO_CLEAR_FRAME		0x0064
 
-//typedef enum
-//{
-//	OUTPUT_NONE,
-//	OUTPUT_HDMI,
-//	OUTPUT_COMPOSITE,
-//	OUTPUT_COMPONENT,
-//	OUTPUT_MAX
-//}OUTPUT_SELECT;
-//
-//typedef enum{
-//	LCDC_LAYER_0, 
-//	LCDC_LAYER_1, 
-//	LCDC_LAYER_2, 
-//	LCDC_LAYER_MAX
-//}LCD_IMG_LAYER_TYPE;
-
-
-//typedef enum{
-//	TCC_LCDC_IMG_FMT_1BPP,
-//	TCC_LCDC_IMG_FMT_2BPP,
-//	TCC_LCDC_IMG_FMT_4BPP,
-//	TCC_LCDC_IMG_FMT_8BPP,
-//	TCC_LCDC_IMG_FMT_RGB332 = 8,
-//	TCC_LCDC_IMG_FMT_RGB444 = 9,
-//	TCC_LCDC_IMG_FMT_RGB565 = 10,
-//	TCC_LCDC_IMG_FMT_RGB555 = 11,
-//	TCC_LCDC_IMG_FMT_RGB888 = 12,
-//	TCC_LCDC_IMG_FMT_RGB666 = 13,
-//	TCC_LCDC_IMG_FMT_UYVY = 22,
-//	TCC_LCDC_IMG_FMT_VYUY = 23,
-//	TCC_LCDC_IMG_FMT_YUV420SP = 24,	
-//	TCC_LCDC_IMG_FMT_YUV422SP = 25, 
-//	TCC_LCDC_IMG_FMT_YUV422SQ = 26, 
-//	TCC_LCDC_IMG_FMT_YUYV = 26,
-//	TCC_LCDC_IMG_FMT_YVYU = 27,
-//	TCC_LCDC_IMG_FMT_YUV420ITL0 = 28, 
-//	TCC_LCDC_IMG_FMT_YUV420ITL1 = 29, 
-//	TCC_LCDC_IMG_FMT_YUV422ITL0 = 30, 
-//	TCC_LCDC_IMG_FMT_YUV422ITL1 = 31, 
-//	TCC_LCDC_IMG_FMT_MAX
-//}TCC_LCDC_IMG_FMT_TYPE;
-
-//typedef struct  
-//{
-//	unsigned lcdc_num;
-//	unsigned layer_num;
-//} lcdc_layerctrl_params;
-
 struct tcc_lcdc_image_update_extend
 {
 	unsigned int Lcdc_layer;
