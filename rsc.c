@@ -30,16 +30,6 @@ void rsc_init_lcd(CameraDevice* self)
 	int panel_width, panel_height;
     static struct fb_var_screeninfo fb_info;
 
-	typedef struct _ImageInfoType {
-		unsigned int ImageFmt;
-		unsigned int pos_x;
-		unsigned int pos_y;
-		unsigned int width;
-		unsigned int height;
-	} ImageInfoType;
-	ImageInfoType ImgInfo;
-
-
 	/* read LCD panel size
 	 */
 	sysfs_fd = fopen(PANEL_WIDTH, "r");
@@ -73,11 +63,6 @@ void rsc_init_lcd(CameraDevice* self)
 	printf("- get framebuffer size : %dx%d\n", fb_info.xres, fb_info.yres);
 	printf("- set preview size     : %dx%d\n", self->preview_width, self->preview_height);
 
-	ImgInfo.width 	= self->preview_width;
-	ImgInfo.height 	= self->preview_height;
-	ImgInfo.pos_x 	= 0;
-	ImgInfo.pos_y 	= 0;
-
 	if (self->outdisp_dev) {
 		self->outdisp_info.enable		= 1;
 		self->outdisp_info.Lcdc_layer	= LCDC_LAYER_2;
@@ -99,20 +84,6 @@ void rsc_init_lcd(CameraDevice* self)
 		
 		self->outdisp_info.outputMode	= OUTPUT_COMPOSITE;
 		self->outdisp_info.on_the_fly	= 0;
-	}
-
-	if (self->use_vout == 0) {
-		self->overlay_config.sx = ImgInfo.pos_x;
-		self->overlay_config.sy = ImgInfo.pos_y;
-		self->overlay_config.width = ImgInfo.width;
-		self->overlay_config.height = ImgInfo.height;
-		//self->overlay_config.format = self->vid_fmt.fmt.pix.pixelformat;
-		self->overlay_config.format = vioc2fourcc(self->preview_fmt);
-
-		ioctl(self->overlay_fd, OVERLAY_SET_CONFIGURE,&self->overlay_config);
-		printf("[%s] OVERLAY_SET_CONFIGURE: (%d x %d) fmt(0x%x)\n", __func__,
-					self->overlay_config.width, self->overlay_config.height,
-					self->overlay_config.format);
 	}
 
 	//if (self->outdisp_dev) {
