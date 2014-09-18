@@ -1,3 +1,6 @@
+# Local files
+camapp
+
 # Object files
 *.o
 *.ko

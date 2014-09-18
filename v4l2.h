@@ -305,8 +305,6 @@ typedef struct {
     int							mem_len;
     void						*outbuf; //phy_addr
 
-	int			 				rt_mode;
-
 	int							overlay_fd;
 	overlay_config_t			overlay_config;
 

@@ -121,6 +121,8 @@ static int _camif_init_format (CameraDevice *self, int width, int height)
 	printf("VIDIOC_G_FMT: get self[%d]->vid_fmt.fmt.pix info\n", self->camdev);
 	printf("    .width  = %d\n", self->vid_fmt.fmt.pix.width);
 	printf("    .height = %d\n", self->vid_fmt.fmt.pix.height);
+
+#if 0
 	/* For do not use scaler 
 	 *  - if width/height is same self->vid_fmt.fmt.pix.width/height
 	 *    camera driver do not use scaler.
@@ -130,6 +132,16 @@ static int _camif_init_format (CameraDevice *self, int width, int height)
 	 */
 	width = self->vid_fmt.fmt.pix.width;
 	height = self->vid_fmt.fmt.pix.height;
+#else
+	/* Set S_FMT size
+	 */
+	if (!self->outdisp_dev) {
+		if (self->output_width > 0 && self->output_height > 0) {
+			width = (self->output_width > width) ? width : self->output_width;
+			height = (self->output_height > height) ? height : self->output_height;
+		}
+	}
+#endif
 
 	switch (self->preview_fmt) {
 	case TCC_LCDC_IMG_FMT_YUV420SP:

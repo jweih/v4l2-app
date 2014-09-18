@@ -18,13 +18,16 @@ when        who       what, where, why
 #include "main.h"
 #include "tcc_scaler_interface.h"
 
+#define PANEL_WIDTH "/sys/devices/virtual/tcc_dispman/tcc_dispman/tcc_output_panel_width"
+#define PANEL_HEIGHT "/sys/devices/virtual/tcc_dispman/tcc_dispman/tcc_output_panel_height"
 
 /*===========================================================================
 FUNCTION
 ===========================================================================*/
 void rsc_init_lcd(CameraDevice* self)
 {
-    static struct fb_fix_screeninfo fb_fix;
+	FILE *sysfs_fd = NULL;
+	int panel_width, panel_height;
     static struct fb_var_screeninfo fb_info;
 
 	typedef struct _ImageInfoType {
@@ -34,20 +37,46 @@ void rsc_init_lcd(CameraDevice* self)
 		unsigned int width;
 		unsigned int height;
 	} ImageInfoType;
-
 	ImageInfoType ImgInfo;
 
-    ioctl(self->fb_fd0, FBIOGET_FSCREENINFO, &fb_fix);
-    ioctl(self->fb_fd0, FBIOGET_VSCREENINFO, &fb_info);
 
-	self->preview_width  = fb_info.xres;
-	self->preview_height = fb_info.yres;
-	printf("LCD mode: %d, Preview: %d x %d\n", self->rt_mode, self->preview_width, self->preview_height);
+	/* read LCD panel size
+	 */
+	sysfs_fd = fopen(PANEL_WIDTH, "r");
+	if (sysfs_fd <= 0) {
+		printf("error: open %s\n", PANEL_WIDTH);
+		panel_width = 0;
+	} else {
+		fscanf(sysfs_fd, "%d", &panel_width);
+	}
+	fclose(sysfs_fd);
+	sysfs_fd = fopen(PANEL_HEIGHT, "r");
+	if (sysfs_fd <= 0) {
+		printf("error: open %s\n", PANEL_HEIGHT);
+		panel_height = 0;
+	} else {
+		fscanf(sysfs_fd, "%d", &panel_height);
+	}
+	fclose(sysfs_fd);
+
+	/* read fbdev info
+	 */
+	ioctl(self->fb_fd0, FBIOGET_VSCREENINFO, &fb_info);
+
+	/* set preview size
+	 */
+	self->preview_width = (panel_width > 0) ? panel_width : fb_info.xres;
+	self->preview_height = (panel_height > 0) ? panel_height : fb_info.yres;
+
+	printf("[%s] Overlay size\n", __func__);
+	printf("- get output panel size: %dx%d\n", panel_width, panel_height);
+	printf("- get framebuffer size : %dx%d\n", fb_info.xres, fb_info.yres);
+	printf("- set preview size     : %dx%d\n", self->preview_width, self->preview_height);
 
 	ImgInfo.width 	= self->preview_width;
 	ImgInfo.height 	= self->preview_height;
-	ImgInfo.pos_x 	= (fb_info.xres > ImgInfo.width)  ? (fb_info.xres-ImgInfo.width)/2  : 0;
-	ImgInfo.pos_y 	= (fb_info.yres > ImgInfo.height) ? (fb_info.yres-ImgInfo.height)/2 : 0;
+	ImgInfo.pos_x 	= 0;
+	ImgInfo.pos_y 	= 0;
 
 	if (self->outdisp_dev) {
 		self->outdisp_info.enable		= 1;
