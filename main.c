@@ -16,9 +16,6 @@ when        who       what, where, why
 ===========================================================================*/
 #include "main.h"
 
-/* for auto_start */
-static int auto_start;
-
 /**************************************************************************/
 /*                         Util functions                                 */
 /**************************************************************************/
@@ -308,15 +305,17 @@ void* handle_stdin(void* param)
 	char cmdline[1024];
 	int r;
 
-	if (auto_start)
-		goto auto_start;
+	if (dev->auto_start) {
+		dev->display = 1;
+		rsc_init_lcd(dev);
+		camif_set_resolution(dev, dev->preview_width, dev->preview_height);
+		camif_start_stream(dev);
+		rsc_overlay_ctrl(dev, 1);
+	}
 
 	while (1)
 	{
 		usleep(1000*100);
-
-		if (auto_start)
-			continue;
 
 		// 1. Get Command!!
 		memset(cmdline,0x00,1024);		
@@ -326,12 +325,9 @@ void* handle_stdin(void* param)
 		// 2. Process Function!!
 		if (!strncmp("start", cmdline, 5))
 		{
-auto_start:
 			/* dispaly on */
 			dev->display = 1;
-
 			rsc_init_lcd(dev);
-
 			camif_set_resolution(dev, dev->preview_width, dev->preview_height);
 			camif_start_stream(dev);
 			rsc_overlay_ctrl(dev, 1);
@@ -522,15 +518,26 @@ void help_msg(void)
 	printf("------------------------------------------------------------\n"
            "|  Usage: camapp\n"
            "| ===============\n"
-           "| <Display sensor image to LCD>\n" 
+           "| <Display sensor image to LCD>\n"
            "|  -d [video device number]\n"
            "|    ex) display sensor /dev/video0\n"
            "|       $ camapp -d 0\n"
            "|    ex) display sensor /dev/video1\n"
            "|       $ camapp -d 1\n"
+           "|<command>\n"
+           "| start - start stream\n"
+           "| stop  - stop stream\n"
+           "| quit  - quit camapp\n"
+           "------------------------------------------------------------\n");
+}
 
+void help_dbg(void)
+{
+	printf("------------------------------------------------------------\n"
+           "| <Auto-start option>\n"
+           "|  -x\n"
+           "|    ex) $ camapp -d 0 -x\n"
            "|\n"
-           "| ------ for debugging options -----\n"
            "| <Time-Stamp & Recoding file>\n"
            "|  * ONLY support single channel\n"
            "|  -t [option]\n"
@@ -555,12 +562,12 @@ void help_msg(void)
            "|            $ w16 8c12 1f\n"
            "|           2-b) read 16bit register 0x8c12\n"
            "|            $ r16 8c12\n"
-           "|\n"
            "------------------------------------------------------------\n");
 }
 
 static int use_vout = 0;
-int parse_args(int argc, char *argv[], CameraDevice *dev, int *option)
+int help_debug;
+int parse_args(int argc, char *argv[], CameraDevice *dev, int *option, int *help_dbg, int *fmt)
 {
 	int ret = 0;
 	int device = 0;
@@ -575,21 +582,25 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *option)
 		{"option", 1, 0, 't'},
 		{"i2c_addr", 1, 0, 'a'},
 		{"i2c_port", 1, 0, 'p'},
+		{"format", 0, 0, 'f'},
+		{"debug", 0, &help_debug, 1},
 		{0, 0, 0, 0}
 	};
+
+	help_debug = 0;
 
 	while (1) {
 		int c = 0;
 		int option_idx = 0;
 
-		c = getopt_long(argc, argv, "xdv:w:h:t:a:p:", long_opt, &option_idx);
+		c = getopt_long(argc, argv, "xdvfw:h:t:a:p:", long_opt, &option_idx);
 		if (c == -1) { break; }
 
 		switch (c) {
 		case 0:
 			break;
 		case 'x':
-			auto_start = 1;
+			dev->auto_start = 1;
 			break;
 		case 'd':
 			device = 1;
@@ -618,12 +629,17 @@ int parse_args(int argc, char *argv[], CameraDevice *dev, int *option)
 		case 'p':
 			i2c_dev_port = tcc_malloc_string(optarg);
 			break;
+		case 'f':
+			*fmt = 1;
+			break;
 		default:
 			printf("invalid argument: optarg[%s]\n", optarg);
 			ret = -1;
 			break;
 		}
 	}
+
+	*help_dbg = help_debug;
 
 	if (device) {
 		while (optind < argc) {
@@ -658,6 +674,8 @@ int main(int argc, char *argv[])
 	CameraDevice *dev;
 	unsigned int preview_fmt;
 	int fb_fd, overlay_fd, viqe_fd, i2c_fd;
+	int fmt = 0;
+	int dbg_help = 0;
 
 	if (argc < 2) {
 		help_msg();
@@ -667,7 +685,11 @@ int main(int argc, char *argv[])
 	dev = (CameraDevice *)malloc(sizeof(CameraDevice));
 	memset(dev, 0, sizeof(CameraDevice));
 
-	if (parse_args(argc, argv, dev, &option)) {
+	if (parse_args(argc, argv, dev, &option, &dbg_help, &fmt)) {
+		if (dbg_help) {
+			help_dbg();
+			goto exit;
+		}
 		help_msg();
 		goto exit;
 	}
@@ -675,7 +697,7 @@ int main(int argc, char *argv[])
 	/*
 	 * choice preview image format
 	 */
-	if (auto_start) {
+	if (dev->auto_start || fmt == 0) {
 		preview_fmt = TCC_LCDC_IMG_FMT_YUV420SP;
 		printf("Preview Image Format: YCbCr 4:2:0 Separated\n");
 	} else {
